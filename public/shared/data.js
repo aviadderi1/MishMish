@@ -76,11 +76,13 @@
         const id = `${r.driverId}_${r.day}`;
         const old = store.s.reports.find((x) => x.id === id);
         if (old) Object.assign(old, r, { sentAtMs: Date.now() }); else store.s.reports.push({ ...r, id, approved: false, sentAtMs: Date.now() });
-        const diff = r.counted - r.collected;
-        store.notify('manager', `דוח יום מ${r.driverName}`, `נגבו ₪${r.collected.toLocaleString('he-IL')} · נספרו ₪${r.counted.toLocaleString('he-IL')}${diff ? ` · ${diff < 0 ? 'חסרים' : 'עודף'} ₪${Math.abs(diff).toLocaleString('he-IL')}` : ''}`);
+        const diff = r.counted - r.expected;
+        store.notify('manager', `דוח יום מ${r.driverName}`, `להעברה ₪${r.expected.toLocaleString('he-IL')} · נספרו ₪${r.counted.toLocaleString('he-IL')}${diff ? ` · ${diff < 0 ? 'חסרים' : 'עודף'} ₪${Math.abs(diff).toLocaleString('he-IL')}` : ''}`);
         store.commit();
       },
       async approveReport(id) { store.s.reports.find((x) => x.id === id).approved = true; store.commit(); },
+      async setFee(id, fee) { order(id).fee = fee; store.commit(); },
+      async resetAll() { store.s.orders = []; store.s.reports = []; store.commit(); },
       async saveOrder(o) {
         const id = o.id || store.id();
         if (o.id) Object.assign(order(o.id), o);
@@ -204,6 +206,20 @@
         return saveThenNotify(col('reports').doc(id).set({ ...r, approved: false, sentAt: now() }, { merge: true }), { kind: 'report', reportId: id });
       },
       approveReport: (id) => col('reports').doc(id).update({ approved: true, approvedAt: now() }),
+      setFee(id, fee) {
+        const w = col('orders').doc(id).update({ fee });
+        w.catch((e) => console.error(e));
+        return Promise.race([w, new Promise((r) => setTimeout(r, 1500))]);
+      },
+      async resetAll() {
+        const snaps = await Promise.all([col('orders').get({ source: 'server' }), col('reports').get({ source: 'server' })]);
+        const refs = snaps.flatMap((x) => x.docs.map((d) => d.ref));
+        for (let i = 0; i < refs.length; i += 400) {
+          const b = fs.batch();
+          refs.slice(i, i + 400).forEach((r) => b.delete(r));
+          await b.commit();
+        }
+      },
       async saveOrder(o) {
         const { id, ...f } = o;
         if (id) { await col('orders').doc(id).update(f); return id; }
@@ -287,9 +303,12 @@
         const b = e.target.closest('[data-s]');
         if (!b) return;
         if (b.dataset.s === 'close') return s.remove();
-        s.remove(); onAction(b.dataset.s);
+        const inp = s.querySelector('input');
+        const value = inp ? inp.value : undefined;
+        s.remove(); onAction(b.dataset.s, value);
       });
       root.appendChild(s);
+      return s;
     },
     render(root, html) {
       const main = root.querySelector('.main');

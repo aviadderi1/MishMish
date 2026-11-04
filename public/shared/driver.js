@@ -51,7 +51,10 @@
                 <span style="color:#D5DED8">${esc([o.address, o.city].filter(Boolean).join(', '))}</span>
                 <span class="mut" style="font-size:15px">${esc(o.product)}</span></button>`
             : `<div class="stop isdone" style="cursor:default;opacity:1"><span class="row"><span style="font-weight:600">${esc(o.customer)}</span><span style="font-weight:700">${money(o.amount)}</span></span>
-                <span class="row"><span class="mut">${esc(o.city)}</span><span style="font-size:13px;color:${o.status === 'paid' ? '#5BD29A' : '#F2A33A'}">${o.status === 'paid' ? 'שולם' : 'לא נמסר' + (o.failReason ? ' · ' + esc(o.failReason) : '')}</span></span></div>`).join('')}
+                <span class="row"><span class="mut">${esc(o.city)}</span><span style="font-size:13px;color:${o.status === 'paid' ? '#5BD29A' : '#F2A33A'}">${o.status === 'paid' ? 'שולם' : 'לא נמסר' + (o.failReason ? ' · ' + esc(o.failReason) : '')}</span></span>
+                ${rep && rep.approved
+                  ? (o.fee ? `<span class="mut">משלוח: ${money(o.fee)}</span>` : '')
+                  : `<button type="button" class="btn ghost" style="color:#F2A33A;border-color:#F2A33A;min-height:44px" data-a="fee" data-v="${esc(o.id)}">${o.fee ? `משלוח: ${money(o.fee)} · עריכה` : 'משלוח'}</button>`}</div>`).join('')}
           ${rep && rep.approved ? '<div class="mut">הדוח אושר על ידי המנהל</div>' : ''}
           ${day !== today && os.length && !(rep && rep.approved) ? `<button class="btn ghost" type="button" data-a="closeDay" data-v="${day}">${rep ? 'עדכון הסיכום של היום הזה' : 'שליחת סיכום ליום הזה'}</button>` : ''}
         </section>`;
@@ -70,26 +73,30 @@
     function closeNumbers() {
       const os = st.orders.filter((o) => o.day === st.close.day);
       const paid = os.filter((o) => o.status === 'paid');
-      return { os, paid, failed: os.filter((o) => o.status === 'failed'), open: os.filter((o) => o.status === 'sent'), collected: paid.reduce((s, o) => s + o.amount, 0) };
+      const collected = paid.reduce((s, o) => s + o.amount, 0);
+      const fees = os.reduce((s, o) => s + (o.fee || 0), 0);
+      return { os, paid, failed: os.filter((o) => o.status === 'failed'), open: os.filter((o) => o.status === 'sent'), collected, fees, expected: collected - fees };
     }
 
     function closeView() {
       const c = st.close, n = closeNumbers();
       const counted = Number(String(c.counted).replace(/[^\d.]/g, ''));
       const has = String(c.counted).trim() !== '' && !Number.isNaN(counted);
-      const diff = counted - n.collected;
+      const diff = counted - n.expected;
       return `<header class="hdr"><div class="row"><div class="sub">${dateLabel(c.day)}</div><button class="btn hdrbtn" type="button" data-a="closeBack">חזרה</button></div><h1>סיכום יום</h1></header>
       <main class="main">
         ${st.err ? `<div class="err" role="alert">${esc(st.err)}</div>` : ''}
         <section class="card pad" style="gap:10px;padding:16px">
           <div class="row"><span style="color:#D5DED8">נמסרו</span><b>${n.paid.length} משלוחים</b></div>
           <div class="row"><span style="color:#D5DED8">לא נמסרו</span><b>${n.failed.length + n.open.length}</b></div>
-          <div class="row" style="align-items:baseline;border-top:1px solid var(--line);padding-top:10px"><span style="color:#D5DED8">צריך להיות אצלך</span><b style="font-size:26px">${money(n.collected)}</b></div>
+          <div class="row"><span style="color:#D5DED8">נגבה מלקוחות</span><b>${money(n.collected)}</b></div>
+          <div class="row"><span style="color:#D5DED8">משלוחים (קיזוז)</span><b>${n.fees ? '-' + money(n.fees) : money(0)}</b></div>
+          <div class="row" style="align-items:baseline;border-top:1px solid var(--line);padding-top:10px"><span style="color:#D5DED8">צריך להעביר למנהל</span><b style="font-size:26px">${money(n.expected)}</b></div>
         </section>
         ${n.open.length ? `<div class="err" role="status">עדיין יש ${n.open.length} משלוחים פתוחים. הם יופיעו בדוח כלא הושלמו.</div>` : ''}
         <div class="field"><label for="counted" style="font-size:17px;font-weight:600">כמה כסף ספרת? (₪)</label><input id="counted" class="big" style="height:68px;font-size:32px;border-color:#F2A33A" data-f="counted" inputmode="decimal" value="${esc(c.counted)}" autocomplete="off"></div>
         <button class="btn ghost" style="color:#F2A33A;border-color:#F2A33A" type="button" data-a="openCash">ספירה עם טבלת שטרות</button>
-        ${has ? (diff === 0 ? '<div class="tag" role="status" style="padding:12px 14px;font-size:16px">הסכום תואם</div>' : `<div class="err" role="status" style="font-size:16px;font-weight:600">${diff < 0 ? 'חסרים' : 'יש עודף של'} ${money(Math.abs(diff))} לעומת הסכום שנגבה</div>`) : ''}
+        ${has ? (diff === 0 ? '<div class="tag" role="status" style="padding:12px 14px;font-size:16px">הסכום תואם</div>' : `<div class="err" role="status" style="font-size:16px;font-weight:600">${diff < 0 ? 'חסרים' : 'יש עודף של'} ${money(Math.abs(diff))} לעומת הסכום להעברה</div>`) : ''}
         <div class="field"><label for="cnote">הערה למנהל (לא חובה)</label><input id="cnote" data-f="note" value="${esc(c.note)}" autocomplete="off"></div>
       </main>
       <div class="footer" style="background:transparent;padding-bottom:18px"><button class="btn done" style="min-height:64px;font-size:20px" type="button" data-a="sendReport" ${st.busy ? 'disabled' : ''}>${reportOf(c.day) ? 'שליחה מחדש למנהל' : 'שליחת הסיכום למנהל'}</button></div>`;
@@ -156,6 +163,16 @@
           draw();
         });
       },
+      fee(v) {
+        const o = st.orders.find((x) => x.id === v);
+        const sh = g.UI.sheet(root, `<h2>מחיר המשלוח לנהג</h2><div class="mut" style="font-size:15px">${esc(o.customer)} · ${esc(o.city)}</div>
+          <div class="field"><label for="feeval">סכום (₪)</label><input id="feeval" class="big" style="border-color:#F2A33A" inputmode="decimal" value="${o.fee ? esc(o.fee) : ''}" autocomplete="off"></div>
+          <button class="btn done" style="min-height:56px;font-size:18px" data-s="save">שמירה</button><button class="btn ghost" data-s="close">ביטול</button>`, async (_, val) => {
+          const fee = Number(String(val).replace(/[^\d.]/g, '')) || 0;
+          try { await db.setFee(v, fee); } catch (e) { console.error(e); g.UI.toast(root, 'השמירה נכשלה', 'נסה שוב'); }
+        });
+        sh.querySelector('#feeval').focus();
+      },
       closeDay(v) { const r = reportOf(v); st.err = ''; st.close = { day: v, counted: r ? String(r.counted) : '', note: r ? r.note || '' : '' }; draw(); const m = root.querySelector('.main'); if (m) m.scrollTop = 0; },
       closeBack() { st.close = null; st.err = ''; draw(); },
       openCash() { st.cash = { 200: 0, 100: 0, 50: 0, 20: 0 }; draw(); },
@@ -167,11 +184,11 @@
         const counted = Number(String(st.close.counted).replace(/[^\d.]/g, ''));
         if (String(st.close.counted).trim() === '' || Number.isNaN(counted)) { st.err = 'כתוב כמה כסף ספרת.'; return draw(); }
         const c = st.close, n = closeNumbers();
-        const rows = n.os.map((o) => ({ customer: o.customer, city: o.city, product: o.product, status: o.status, amount: o.amount }));
+        const rows = n.os.map((o) => ({ customer: o.customer, city: o.city, product: o.product, status: o.status, amount: o.amount, fee: o.fee || 0 }));
         (async () => {
           st.busy = true; st.err = ''; draw();
           try {
-            await db.sendReport({ driverId: st.driverId, driverName: (st.me && st.me.name) || '', driverPhone: (st.me && st.me.phone) || '', day: c.day, counted, collected: n.collected, note: c.note.trim(), rows });
+            await db.sendReport({ driverId: st.driverId, driverName: (st.me && st.me.name) || '', driverPhone: (st.me && st.me.phone) || '', day: c.day, counted, collected: n.collected, fees: n.fees, expected: n.expected, note: c.note.trim(), rows });
             st.close = null;
             g.UI.toast(root, 'הסיכום נשלח למנהל', money(counted));
           } catch (e) { console.error(e); st.err = 'השליחה נכשלה. נסה שוב.'; }

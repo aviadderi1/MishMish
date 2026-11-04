@@ -48,7 +48,7 @@
 
     function newView() {
       const editing = !!st.order.id;
-      return `${hdr(editing ? 'עריכת הזמנה' : 'הזמנה חדשה', new Date().toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' }))}
+      return `${hdr(editing ? 'עריכת הזמנה' : 'הזמנה חדשה', new Date().toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' }), '<button class="btn hdrbtn" style="width:48px;padding:0;display:flex;align-items:center;justify-content:center" type="button" data-a="settings" aria-label="הגדרות"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"></path></svg></button>')}
       <form class="main" data-submit="order">
         ${err()}
         ${field('cust', 'שם הלקוח', 'order', 'customer', 'autocomplete="off"')}
@@ -160,8 +160,8 @@
           <div class="card pad" style="gap:2px;background:#F9E7D8;color:#6F2D08;border:0"><b style="font-size:23px">${money(all - got)}</b><span style="font-size:14px">לא נגבו</span></div>
         </div>
         ${ids.length ? `<section class="card pad"><h2 style="font-size:16px">כמה כל נהג צריך להעביר</h2>
-          ${ids.map((id) => { const d = os.filter((o) => o.driverId === id); const dp = d.filter((o) => o.status === 'paid');
-            return `<div class="row" style="border-top:1px solid #E8EBE6;padding-top:8px"><div><div style="font-weight:600">${esc(d[0].driverName)}</div><div class="mut">${dp.length} מתוך ${d.length} נמסרו</div></div><div class="b" style="font-size:18px">${money(dp.reduce((s, o) => s + o.amount, 0))}</div></div>`; }).join('')}</section>` : '<div class="empty">אין נתונים ליום הזה.</div>'}
+          ${ids.map((id) => { const d = os.filter((o) => o.driverId === id); const dp = d.filter((o) => o.status === 'paid'); const fee = d.reduce((s, o) => s + (o.fee || 0), 0);
+            return `<div class="row" style="border-top:1px solid #E8EBE6;padding-top:8px"><div><div style="font-weight:600">${esc(d[0].driverName)}</div><div class="mut">${dp.length} מתוך ${d.length} נמסרו${fee ? ` · משלוחים ${money(fee)}` : ''}</div></div><div class="b" style="font-size:18px">${money(dp.reduce((s, o) => s + o.amount, 0) - fee)}</div></div>`; }).join('')}</section>` : '<div class="empty">אין נתונים ליום הזה.</div>'}
         ${missing.length ? `<section class="card pad"><h2 style="font-size:16px">לא נמסר</h2>
           ${missing.map((o) => `<div class="row" style="border-top:1px solid #E8EBE6;padding-top:6px"><div class="grow"><div style="font-weight:500">${esc(o.customer)} · ${esc(o.city)} · ${money(o.amount)}</div><div class="mut">${esc(o.driverName)} · ${o.status === 'failed' ? esc(o.failReason || 'לא נמסר') : 'עדיין בדרך'}</div></div>
           ${o.status === 'failed' ? `<button class="btn ghost small" type="button" data-a="returnOrder" data-v="${esc(o.id)}">החזר להזמנות</button>` : ''}</div>`).join('')}</section>` : ''}
@@ -172,20 +172,21 @@
       </main>${nav()}`;
     }
 
+    const expectedOf = (r) => (r.expected != null ? r.expected : r.collected - (r.fees || 0));
     function reportsView() {
       const label = new Date(st.day + 'T12:00').toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
       const os = st.orders.filter((o) => o.day === st.day && ['sent', 'paid', 'failed'].includes(o.status));
       const reps = st.reports.filter((r) => r.day === st.day);
       const waiting = [...new Set(os.map((o) => o.driverId))].filter((id) => !reps.some((r) => r.driverId === id));
       const tag = (r) => {
-        const d = r.counted - r.collected;
+        const d = r.counted - expectedOf(r);
         return d === 0 ? '<span class="tag">תואם</span>' : `<span class="tag warn">${d < 0 ? 'חסרים' : 'עודף'} ${money(Math.abs(d))}</span>`;
       };
       return `${hdr('דוחות נהגים', label, '<button class="btn hdrbtn" type="button" data-a="back">חזרה</button>')}
       <main class="main">${err()}
         ${reps.map((r) => `<section class="card pad">
           <div class="row"><h2 style="font-size:17px">${esc(r.driverName)}</h2>${tag(r)}</div>
-          <div class="mut" style="color:#3F4B45">${(r.rows || []).filter((x) => x.status === 'paid').length} נמסרו · נגבו ${money(r.collected)} · נספרו ${money(r.counted)}</div>
+          <div class="mut" style="color:#3F4B45">${(r.rows || []).filter((x) => x.status === 'paid').length} נמסרו · נגבו ${money(r.collected)}${r.fees ? ` · משלוחים ${money(r.fees)}` : ''} · להעברה ${money(expectedOf(r))} · נספרו ${money(r.counted)}</div>
           ${r.note ? `<div class="mut">הערה: ${esc(r.note)}</div>` : ''}
           <div class="two"><button class="btn ghost" type="button" data-a="openPdf" data-v="${esc(r.id)}">פתיחת דוח PDF</button><button class="btn ghost" type="button" data-a="sharePdf" data-v="${esc(r.id)}">שיתוף</button></div>
           ${r.approved ? '<span class="tag" style="align-self:flex-start">הדוח אושר</span>' : `<button class="btn" type="button" data-a="approve" data-v="${esc(r.id)}">אישור דוח</button>`}
@@ -193,6 +194,15 @@
         ${waiting.map((id) => { const d = os.filter((o) => o.driverId === id); return `<section class="card pad"><div class="row"><h2 style="font-size:17px">${esc(d[0].driverName)}</h2><span class="tag wait">טרם נשלח</span></div><div class="mut">${d.filter((o) => o.status === 'paid').length} מתוך ${d.length} נמסרו · נגבו ${money(d.filter((o) => o.status === 'paid').reduce((s, o) => s + o.amount, 0))}</div></section>`; }).join('')}
         ${!reps.length && !waiting.length ? '<div class="empty">אין דוחות ליום הזה.</div>' : ''}
       </main>${nav()}`;
+    }
+
+    function settingsView() {
+      return `${hdr('הגדרות', '', '<button class="btn hdrbtn" type="button" data-a="back">חזרה</button>')}
+      <main class="main">${err()}
+        <section class="card pad"><h2 style="font-size:17px">איפוס נתונים</h2>
+          <div class="mut" style="color:#3F4B45">מוחק הזמנות, משלוחים ודוחות אצלך ואצל כל הנהגים.</div>
+          <button class="btn ghost" style="color:#A32B12;border-color:#A32B12" type="button" data-a="resetAsk">איפוס נתונים</button></section>
+      </main>`;
     }
 
     function driversView() {
@@ -261,6 +271,7 @@
       else if (st.sub === 'created') v = createdView();
       else if (st.sub === 'areas') v = areasView();
       else if (st.sub === 'reports') v = reportsView();
+      else if (st.sub === 'settings') v = settingsView();
       else v = { new: newView, orders: ordersView, track: trackView, summary: summaryView, drivers: driversView }[st.tab]();
       g.UI.render(root, (db.demo ? '<div class="demo">מצב הדגמה · נתונים לדוגמה</div>' : '') + v);
     }
@@ -403,6 +414,20 @@
         const d = new Date(st.day + 'T12:00'); d.setDate(d.getDate() + Number(v));
         st.day = db.today(d); st.showDetail = false; subOrders(); draw();
       },
+      settings() { go(() => { st.sub = 'settings'; }); },
+      resetAsk() {
+        const WORD = 'מחיקה';
+        const sh = g.UI.sheet(root, `<h2 style="color:#A32B12">למחוק את כל הנתונים?</h2>
+          <div style="line-height:1.5">כל ההזמנות, המשלוחים והדוחות יימחקו לצמיתות, גם אצל הנהגים. <b>אי אפשר לשחזר אותם.</b></div>
+          <div class="mut" style="color:#3F4B45">הנהגים והאזורים יישארו.</div>
+          <div class="field"><label for="resetword">כדי לאשר, כתוב: ${WORD}</label><input id="resetword" autocomplete="off"></div>
+          <button class="btn" style="background:#A32B12" data-s="yes" disabled>מחיקת כל הנתונים</button><button class="btn ghost" data-s="close">ביטול</button>`, () => run(async () => {
+          await db.resetAll();
+          st.sel.clear(); st.showDetail = false; st.openDriver = null; st.sub = null; st.tab = 'new';
+          g.UI.toast(root, 'הנתונים נמחקו', 'הנהגים והאזורים נשארו');
+        }));
+        sh.querySelector('#resetword').addEventListener('input', (e) => { sh.querySelector('[data-s="yes"]').disabled = e.target.value.trim() !== WORD; });
+      },
       reports() { go(() => { st.sub = 'reports'; }); },
       approve(v) { run(() => db.approveReport(v)); },
       openPdf(v) { const r = st.reports.find((x) => x.id === v); run(() => g.Report.open(r, false)); },
@@ -416,8 +441,8 @@
         const os = st.orders.filter((o) => o.day === st.day && ['sent', 'paid', 'failed'].includes(o.status));
         const label = { sent: 'בדרך', paid: 'נמסר ושולם', failed: 'לא נמסר' };
         const q = (s) => `"${String(s == null ? '' : s).replace(/"/g, '""')}"`;
-        const rows = [['לקוח', 'טלפון', 'עיר', 'כתובת', 'אזור', 'מוצר', 'סכום', 'נהג', 'סטטוס', 'סיבה'].map(q).join(',')]
-          .concat(os.map((o) => [o.customer, o.phone, o.city, o.address, areaName(o.areaId, o.areaName), o.product, o.amount, o.driverName, label[o.status], o.failReason].map(q).join(',')));
+        const rows = [['לקוח', 'טלפון', 'עיר', 'כתובת', 'אזור', 'מוצר', 'סכום', 'משלוח', 'נהג', 'סטטוס', 'סיבה'].map(q).join(',')]
+          .concat(os.map((o) => [o.customer, o.phone, o.city, o.address, areaName(o.areaId, o.areaName), o.product, o.amount, o.fee || 0, o.driverName, label[o.status], o.failReason].map(q).join(',')));
         if (g.AndroidApp) return g.AndroidApp.shareFile(`סיכום-${st.day}.csv`, '\ufeff' + rows.join('\r\n'));
         const url = URL.createObjectURL(new Blob(['﻿' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
         const a = document.createElement('a'); a.href = url; a.download = `סיכום-${st.day}.csv`; document.body.appendChild(a); a.click(); a.remove();

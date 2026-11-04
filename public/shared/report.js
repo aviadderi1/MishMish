@@ -4,7 +4,7 @@
   const money = (n) => '₪' + Number(n || 0).toLocaleString('he-IL');
   const LABEL = { sent: 'לא הושלם', paid: 'נמסר ושולם', failed: 'לא נמסר' };
   const COLS = [ // מימין לשמאל: מיקום הקצה הימני ורוחב
-    ['#', 50], ['לקוח', 260], ['עיר', 190], ['מוצר', 300], ['סטטוס', 150], ['סכום', 110]
+    ['#', 44], ['לקוח', 230], ['עיר', 165], ['מוצר', 260], ['סטטוס', 145], ['משלוח', 95], ['סכום', 95]
   ];
   const PER_PAGE = 27;
   const dateLabel = (day) => new Date(day + 'T12:00').toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -33,18 +33,18 @@
     x.fillStyle = '#123C2F'; x.fillRect(M, y, W - 2 * M, rowH);
     let rx = W - M - 14;
     COLS.forEach(([name, w], i) => {
-      text(name, i === 5 ? M + 14 : rx, y + rowH / 2, '600 27px', '#FFFFFF', i === 5 ? 'left' : 'right');
+      text(name, i === 6 ? M + 14 : rx, y + rowH / 2, '600 27px', '#FFFFFF', i === 6 ? 'left' : 'right');
       rx -= w;
     });
     y += rowH;
     rows.forEach((o, n) => {
       let cx = W - M - 14;
-      const cells = [String(startIndex + n + 1), o.customer, o.city, o.product, LABEL[o.status] || '', money(o.amount)];
+      const cells = [String(startIndex + n + 1), o.customer, o.city, o.product, LABEL[o.status] || '', o.fee ? money(o.fee) : '–', money(o.amount)];
       cells.forEach((cell, i) => {
         const w = COLS[i][1];
-        x.font = (i === 1 || i === 5 ? '500' : '400') + ' 26px Rubik, sans-serif';
-        const t = i === 5 ? cell : fit(x, cell, w - 14);
-        text(t, i === 5 ? M + 14 : cx, y + rowH / 2, (i === 1 || i === 5 ? '500' : '400') + ' 26px', o.status === 'paid' || i !== 4 ? '#15231D' : '#A33E0B', i === 5 ? 'left' : 'right');
+        x.font = (i === 1 || i === 6 ? '500' : '400') + ' 26px Rubik, sans-serif';
+        const t = i >= 5 ? cell : fit(x, cell, w - 14);
+        text(t, i === 6 ? M + 14 : cx, y + rowH / 2, (i === 1 || i === 6 ? '500' : '400') + ' 26px', o.status === 'paid' || i !== 4 ? '#15231D' : '#A33E0B', i === 6 ? 'left' : 'right');
         cx -= w;
       });
       y += rowH;
@@ -52,8 +52,10 @@
     });
     if (isLast) {
       y += 50;
-      const diff = r.counted - r.collected;
-      const lines = [['סך הכול נגבה לפי משלוחים', money(r.collected)], ['כסף שהנהג ספר', money(r.counted)]];
+      const fees = r.fees || 0;
+      const expected = r.expected != null ? r.expected : r.collected - fees;
+      const diff = r.counted - expected;
+      const lines = [['סך הכול נגבה מלקוחות', money(r.collected)], ['מחיר משלוחים לנהג (קיזוז)', fees ? '-' + money(fees) : money(0)], ['צריך להעביר למנהל', money(expected)], ['כסף שהנהג ספר', money(r.counted)]];
       const boxW = 640, bx = M;
       lines.forEach(([a, b]) => {
         x.strokeStyle = '#D5DAD4'; x.lineWidth = 2; x.strokeRect(bx, y, boxW, 72);
