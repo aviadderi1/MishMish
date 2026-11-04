@@ -10,5 +10,6 @@ self.APP_CONFIG = {
   },
   vapidKey: "",     // Cloud Messaging > Web Push certificates
   pushUrl: "",      // כתובת שרת הפוש ב-Cloudflare
+  managerApkUrl: "https://github.com/aviadderi1/MishMish/releases/latest/download/manager.apk",
   driverApkUrl: "https://github.com/aviadderi1/MishMish/releases/latest/download/driver.apk"
 };

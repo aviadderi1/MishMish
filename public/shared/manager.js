@@ -4,10 +4,13 @@
   const emptyOrder = () => ({ customer: '', phone: '', city: '', address: '', areaId: '', product: '', amount: '' });
   const emptyDriver = () => ({ name: '', phone: '', areaId: '' });
 
+  const PHONE_KEY = 'mishmish-manager-phone';
+  const readPhone = () => { try { return localStorage.getItem(PHONE_KEY) || ''; } catch (e) { return ''; } };
+
   g.mountManager = function (root, db) {
     root.classList.add('app', 'mgr');
     const st = {
-      user: undefined, tab: 'new', sub: null, areas: [], drivers: [], orders: [], sel: new Set(), reports: [],
+      user: undefined, tab: 'new', sub: null, areas: [], drivers: [], orders: [], sel: new Set(), reports: [], managers: null, myPhone: readPhone(), gate: { name: '', phone: '' }, addMgr: { name: '', phone: '' },
       order: emptyOrder(), driver: emptyDriver(), editDriverId: null, pick: null, created: null,
       login: { password: db.demo ? '123456' : '', register: false }, newArea: '', editArea: null, err: '', busy: false,
       day: db.today(), showDetail: false, openDriver: null, pushAsked: false
@@ -43,6 +46,21 @@
         ${field('lpass', 'סיסמת העסק', 'login', 'password', `type="password" autocomplete="${l.register ? 'new-password' : 'current-password'}" dir="ltr"`)}
         <button class="btn" type="submit" ${st.busy ? 'disabled' : ''}>${l.register ? 'יצירת הסיסמה' : 'כניסה'}</button>
         <button class="link" type="button" data-a="toggleRegister">${l.register ? 'כבר יש סיסמה' : 'פעם ראשונה? יצירת סיסמת עסק'}</button>
+      </form>`;
+    }
+
+    function isAllowed() {
+      if (db.demo) return true;
+      return (st.managers || []).some((m) => db.digits(m.phone) === db.digits(st.myPhone));
+    }
+
+    function gateView() {
+      const first = !st.managers.length;
+      return `<header class="hdr"><h1>${first ? 'המנהל הראשון' : 'אימות מנהל'}</h1><div class="sub">${first ? 'הפרטים שלך יופיעו ברשימת המנהלים' : 'הזן את מספר הטלפון שהמנהל הוסיף עבורך'}</div></header>
+      <form class="main" data-submit="gate">${err()}
+        ${first ? field('gname', 'השם שלך', 'gate', 'name', 'autocomplete="off"') : ''}
+        ${field('gphone', 'טלפון', 'gate', 'phone', 'type="tel" dir="ltr" style="text-align:right" autocomplete="off"')}
+        <button class="btn" type="submit" ${st.busy ? 'disabled' : ''}>כניסה</button>
       </form>`;
     }
 
@@ -206,6 +224,14 @@
     function settingsView() {
       return `${hdr('הגדרות', '', '<button class="btn hdrbtn" type="button" data-a="back">חזרה</button>')}
       <main class="main">${err()}
+        <form class="card pad" data-submit="addManager"><h2 style="font-size:17px">מנהלים</h2>
+          ${(st.managers || []).map((m, i) => `<div class="row" style="border-top:1px solid #E8EBE6;padding-top:6px"><div class="grow"><div style="font-weight:600">${esc(m.name)}${db.digits(m.phone) === db.digits(st.myPhone) ? ' <span class="tag">אתה</span>' : ''}</div><div class="mut" dir="ltr" style="text-align:right">${esc(m.phone)}</div></div>
+            ${db.digits(m.phone) === db.digits(st.myPhone) ? '' : `<a class="icon" style="display:flex;align-items:center;justify-content:center;width:auto;padding:0 6px" href="https://wa.me/?text=${encodeURIComponent(`שלום ${m.name}, להורדת אפליקציית המנהל: ${(g.APP_CONFIG && g.APP_CONFIG.managerApkUrl) || ''}`)}" target="_blank" rel="noopener">שליחת קישור</a><button type="button" class="icon" style="color:#A32B12" data-a="removeManager" data-v="${i}">הסרה</button>`}</div>`).join('')}
+          <div style="border-top:1px solid #E8EBE6;padding-top:8px;display:flex;flex-direction:column;gap:8px">
+          ${field('mname', 'שם', 'addMgr', 'name', 'autocomplete="off"')}
+          ${field('mphone', 'טלפון', 'addMgr', 'phone', 'type="tel" dir="ltr" style="text-align:right" autocomplete="off"')}
+          <button class="btn" type="submit" ${st.busy ? 'disabled' : ''}>הוספת מנהל</button></div>
+          <div class="mut">המנהל החדש מתקין את האפליקציה, מזין את סיסמת העסק ואת הטלפון שלו.</div></form>
         <section class="card pad"><h2 style="font-size:17px">איפוס נתונים</h2>
           <div class="mut" style="color:#3F4B45">מוחק הזמנות, משלוחים שנסגרו ודוחות מהאפליקציה שלך. אצל הנהגים הם נשארים.</div>
           <button class="btn ghost" style="color:#A32B12;border-color:#A32B12" type="button" data-a="resetAsk">איפוס נתונים</button></section>
@@ -273,6 +299,8 @@
       if (st.user === undefined) return;
       let v;
       if (!st.user) v = loginView();
+      else if (st.managers === null && !db.demo) v = '<div class="empty" style="margin:auto">טוען...</div>';
+      else if (!isAllowed()) v = gateView();
       else if (st.sub === 'assign') v = assignView();
       else if (st.sub === 'driverForm') v = driverForm();
       else if (st.sub === 'created') v = createdView();
@@ -327,6 +355,29 @@
           st.order = emptyOrder();
           if (wasEdit) st.tab = 'orders';
           g.UI.toast(root, wasEdit ? 'השינויים נשמרו' : 'ההזמנה נשמרה', `${data.customer} · ${data.city}`);
+        });
+      },
+      gate() {
+        const g0 = st.gate, first = !st.managers.length;
+        if (first && !g0.name.trim()) { st.err = 'חסר: השם שלך.'; return draw(); }
+        if (!validPhone(g0.phone)) { st.err = 'חסר: טלפון תקין.'; return draw(); }
+        const inList = st.managers.some((m) => db.digits(m.phone) === db.digits(g0.phone));
+        if (!first && !inList) { st.err = 'המספר לא ברשימת המנהלים. בקש ממנהל להוסיף אותך.'; return draw(); }
+        run(async () => {
+          if (first) await db.saveManagers([{ name: g0.name.trim(), phone: g0.phone.trim() }]);
+          st.myPhone = g0.phone.trim();
+          try { localStorage.setItem(PHONE_KEY, st.myPhone); } catch (e) { /* נשמר עד הסגירה */ }
+        });
+      },
+      addManager() {
+        const a = st.addMgr;
+        if (!a.name.trim()) { st.err = 'חסר: שם המנהל.'; return draw(); }
+        if (!validPhone(a.phone)) { st.err = 'חסר: טלפון תקין.'; return draw(); }
+        if ((st.managers || []).some((m) => db.digits(m.phone) === db.digits(a.phone))) { st.err = 'המספר הזה כבר ברשימה.'; return draw(); }
+        run(async () => {
+          await db.saveManagers([...(st.managers || []), { name: a.name.trim(), phone: a.phone.trim() }]);
+          st.addMgr = { name: '', phone: '' };
+          g.UI.toast(root, 'המנהל נוסף', 'שלח לו את הקישור ואת סיסמת העסק');
         });
       },
       driver() {
@@ -427,6 +478,11 @@
         st.day = db.today(d); st.showDetail = false; subOrders(); draw();
       },
       settings() { go(() => { st.sub = 'settings'; }); },
+      removeManager(i) {
+        const m = st.managers[Number(i)];
+        g.UI.sheet(root, `<h2>להסיר את ${esc(m.name)}?</h2><div class="mut" style="color:#3F4B45">הוא לא יוכל להשתמש באפליקציית המנהל בפתיחה הבאה.</div>
+          <button class="btn" style="background:#A32B12" data-s="yes">הסרה</button><button class="btn ghost" data-s="close">ביטול</button>`, () => run(() => db.saveManagers(st.managers.filter((x) => x !== m))));
+      },
       resetAsk() {
         const WORD = 'מחיקה';
         const sh = g.UI.sheet(root, `<h2 style="color:#A32B12">למחוק את כל הנתונים?</h2>
@@ -517,6 +573,7 @@
       unsub.splice(0).forEach((f) => f());
       if (unsubOrders) { unsubOrders(); unsubOrders = null; }
       if (u) {
+        unsub.push(db.watchManagers((l) => { st.managers = l; draw(); }));
         unsub.push(db.watchAreas((a) => { st.areas = a; draw(); }));
         unsub.push(db.watchDrivers((d) => { st.drivers = d; draw(); }));
         subOrders();

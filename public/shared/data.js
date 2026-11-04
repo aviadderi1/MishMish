@@ -8,14 +8,14 @@
   const by = (k) => (a, b) => String(a[k] || '').localeCompare(String(b[k] || ''), 'he');
 
   /* ---------- מצב הדגמה ---------- */
-  const KEY = 'mishloach-demo-v3';
+  const KEY = 'mishloach-demo-v4';
   function seed() {
     const a = [['a1', 'צפון'], ['a2', 'מרכז'], ['a3', 'דרום']].map(([id, name]) => ({ id, name }));
     const dr = [['d1', 'משה', '050-000-0201', 'a1'], ['d2', 'עמית', '050-000-0202', 'a2'], ['d3', 'סאמר', '050-000-0203', 'a3']]
       .map(([id, name, phone, areaId]) => ({ id, name, phone, areaId }));
     const o = [['נועה לוי', '052-000-0101', 'חיפה', 'הנשיא 12', 'a1', 'מארז פרימיום × 2', 480], ['יוסי כהן', '052-000-0102', 'קריית אתא', 'הגפן 7', 'a1', 'מארז בסיסי × 1', 150], ['דני אברהם', '052-000-0103', 'פתח תקווה', 'רוטשילד 4', 'a2', 'מארז בסיסי × 2', 300]]
       .map(([customer, phone, city, address, areaId, product, amount], i) => ({ id: 'o' + i, customer, phone, city, address, areaId, product, amount, status: 'new', day: dayKey(), createdAt: Date.now() }));
-    return { areas: a, drivers: dr, orders: o, reports: [], push: null, seq: 100 };
+    return { areas: a, drivers: dr, orders: o, reports: [], managers: [{ name: 'מנהל לדוגמה', phone: '050-000-0301' }], push: null, seq: 100 };
   }
   const store = {
     s: null, subs: new Set(), pushSubs: new Set(), lastPush: null,
@@ -82,6 +82,8 @@
       },
       async approveReport(id) { store.s.reports.find((x) => x.id === id).approved = true; store.commit(); },
       async setFee(id, fee) { order(id).fee = fee; store.commit(); },
+      watchManagers: (cb) => watch(() => store.s.managers, cb),
+      async saveManagers(list) { store.s.managers = list; store.commit(); },
       async clearManager() {
         store.s.orders = store.s.orders.filter((o) => o.status !== 'new');
         const hide = (x) => { x.hiddenManager = true; return !x.hiddenDriver; };
@@ -230,6 +232,12 @@
         w.catch((e) => console.error(e));
         return Promise.race([w, new Promise((r) => setTimeout(r, 1500))]);
       },
+      // רשימת המנהלים נשמרת כמסמך באוסף tokens, שחוקי ההרשאות כבר מאפשרים
+      watchManagers: (cb) => col('tokens').doc('_managers').onSnapshot({ includeMetadataChanges: true }, (d) => {
+        if (!d.exists && d.metadata.fromCache) return; // עוד לא יודעים: מחכים לשרת
+        cb(d.exists ? d.data().list || [] : []);
+      }, (e) => console.error(e)),
+      saveManagers: (list) => col('tokens').doc('_managers').set({ list }),
       // כל צד מוחק רק אצלו. המסמך נמחק מהשרת רק אחרי ששני הצדדים מחקו אותו.
       async clearManager() {
         const snaps = await Promise.all([col('orders').get({ source: 'server' }), col('reports').get({ source: 'server' })]);
