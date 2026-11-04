@@ -121,7 +121,7 @@
   }
 
   // דוח חודשי לנהג: שורה לכל יום וסיכום
-  const MCOLS = [['תאריך', 270], ['משלוחים', 120], ['נגבה', 150], ['נספר', 150], ['הפרש', 120], ['מחיר משלוח', 130], ['תשלום', 120]];
+  const MCOLS = [['תאריך', 230], ['משלוחים', 120], ['נגבה', 145], ['נספר', 145], ['הפרש', 120], ['מחיר משלוח', 175], ['תשלום', 125]];
   function drawMonthPage(m, rows, pageNo, pages, isLast) {
     const c = document.createElement('canvas'); c.width = W; c.height = H;
     const x = c.getContext('2d');
