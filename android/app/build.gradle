@@ -15,7 +15,10 @@ android {
   signingConfigs {
     shared { storeFile file('../signing.jks'); storePassword 'mishmish'; keyAlias 'mishmish'; keyPassword 'mishmish' }
   }
-  buildTypes { release { signingConfig signingConfigs.shared; minifyEnabled false } debug { signingConfig signingConfigs.shared } }
+  buildTypes {
+    release { signingConfig signingConfigs.shared; minifyEnabled false }
+    debug { signingConfig signingConfigs.shared }
+  }
   flavorDimensions = ['role']
   productFlavors {
     manager {
