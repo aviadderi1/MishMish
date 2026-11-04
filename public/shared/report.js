@@ -55,6 +55,7 @@
       const fees = r.fees || 0;
       const diff = r.counted - r.collected;
       const lines = [['סך הכול מחיר משלוחים לנהג', money(fees)], ['סך הכול נגבה מלקוחות', money(r.collected)], ['כסף שהנהג ספר', money(r.counted)]];
+      if (r.payment != null) lines.unshift(['תשלום לנהג', money(r.payment)]);
       const boxW = 640, bx = M;
       lines.forEach(([a, b]) => {
         x.strokeStyle = '#D5DAD4'; x.lineWidth = 2; x.strokeRect(bx, y, boxW, 72);

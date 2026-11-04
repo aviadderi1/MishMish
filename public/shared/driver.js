@@ -45,6 +45,7 @@
         const got = os.filter((o) => o.status === 'paid').reduce((s, o) => s + o.amount, 0);
         return `<section style="display:flex;flex-direction:column;gap:8px;flex-shrink:0">
           <div class="row" style="align-items:baseline"><h2 style="font-size:17px;color:#F2A33A">${dateLabel(day)}</h2><span class="mut">${rep ? 'נספר ' + money(rep.counted) : money(got)}</span></div>
+          ${rep && rep.payment != null ? `<div class="card" style="border:2px solid #5BD29A;display:flex;justify-content:space-between;align-items:center;padding:12px 14px"><span style="font-weight:600">תשלום מנהל</span><b style="font-size:22px;color:#5BD29A">${money(rep.payment)}</b></div>` : ''}
           ${os.map((o) => o.status === 'sent'
             ? `<button type="button" class="stop ${o.id === firstOpen ? 'next' : ''}" data-a="open" data-v="${esc(o.id)}">
                 <span class="row" style="align-items:baseline"><span style="font-size:20px;font-weight:700">${esc(o.customer)}</span><span class="amt">${money(o.amount)}</span></span>

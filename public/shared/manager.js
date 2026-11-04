@@ -211,9 +211,9 @@
         ${reps.map((r) => `<section class="card pad">
           <div class="row"><h2 style="font-size:17px">${esc(r.driverName)}</h2>${tag(r)}</div>
           <div class="mut" style="color:#3F4B45">${(r.rows || []).filter((x) => x.status === 'paid').length} נמסרו · נגבו ${money(r.collected)} · נספרו ${money(r.counted)}</div>
-          <div class="mut">סך מחיר משלוחים: ${money(r.fees || 0)}</div>
           ${r.note ? `<div class="mut">הערה: ${esc(r.note)}</div>` : ''}
-          <div class="two"><button class="btn ghost" type="button" data-a="openPdf" data-v="${esc(r.id)}">פתיחת דוח PDF</button><button class="btn ghost" type="button" data-a="sharePdf" data-v="${esc(r.id)}">שיתוף</button></div>
+          <div class="two"><button class="btn ghost" type="button" data-a="openPdf" data-v="${esc(r.id)}">פתיחת דוח PDF</button><button class="btn ghost" type="button" data-a="payDriver" data-v="${esc(r.id)}">תשלום לנהג</button></div>
+          ${r.payment != null ? `<div style="font-weight:600;color:#0B5443">תשלום לנהג: ${money(r.payment)}</div>` : ''}
           ${r.approved ? '<span class="tag" style="align-self:flex-start">הדוח אושר</span>' : `<button class="btn" type="button" data-a="approve" data-v="${esc(r.id)}">אישור דוח</button>`}
         </section>`).join('')}
         ${waiting.map((id) => { const d = os.filter((o) => o.driverId === id); return `<section class="card pad"><div class="row"><h2 style="font-size:17px">${esc(d[0].driverName)}</h2><span class="tag wait">טרם נשלח</span></div><div class="mut">${d.filter((o) => o.status === 'paid').length} מתוך ${d.length} נמסרו · נגבו ${money(d.filter((o) => o.status === 'paid').reduce((s, o) => s + o.amount, 0))}</div></section>`; }).join('')}
@@ -499,7 +499,17 @@
       reports() { go(() => { st.sub = 'reports'; }); },
       approve(v) { run(() => db.approveReport(v)); },
       openPdf(v) { const r = st.reports.find((x) => x.id === v); run(() => g.Report.open(r, false)); },
-      sharePdf(v) { const r = st.reports.find((x) => x.id === v); run(() => g.Report.open(r, true)); },
+      payDriver(v) {
+        const r = st.reports.find((x) => x.id === v);
+        const sh = g.UI.sheet(root, `<h2>תשלום ל${esc(r.driverName)}</h2>
+          <div class="field"><label for="payval">סכום (₪)</label><input id="payval" class="big" inputmode="decimal" value="${r.payment != null ? esc(r.payment) : ''}" autocomplete="off"></div>
+          <button class="btn" data-s="yes">שלח</button><button class="btn ghost" data-s="close">ביטול</button>`, (_, val) => {
+          const amount = Number(String(val).replace(/[^\d.]/g, ''));
+          if (!(amount > 0)) { st.err = 'כתוב סכום לתשלום.'; return draw(); }
+          run(async () => { await db.setPayment(v, amount); g.UI.toast(root, `נשלח ל${r.driverName}`, `תשלום מנהל ${money(amount)}`); });
+        });
+        sh.querySelector('#payval').focus();
+      },
       toggleDetail() { st.showDetail = !st.showDetail; draw(); },
       returnOrder(v) { run(() => db.returnToOrders(v)); },
       reopen(v) {

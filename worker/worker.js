@@ -102,6 +102,12 @@ export default {
         const tail = diff ? ` · ${diff < 0 ? 'חסרים' : 'עודף'} ${money(Math.abs(diff))}` : '';
         return reply(200, { sent: await pushTo(ctx, 'manager', `דוח יום מ${val(f.driverName)}`, `להעברה ${money(expected)} · נספרו ${money(val(f.counted))}${tail}`) });
       }
+      if (d.kind === 'payment') {
+        const r = await fetch(`https://firestore.googleapis.com/v1/projects/${ctx.project}/databases/(default)/documents/reports/${encodeURIComponent(d.reportId)}`, { headers: { Authorization: `Bearer ${ctx.token}` } });
+        if (!r.ok) return reply(404, { error: 'report not found' });
+        const f = (await r.json()).fields || {};
+        return reply(200, { sent: await pushTo(ctx, val(f.driverId), 'תשלום מנהל', money(val(f.payment))) });
+      }
       return reply(400, { error: 'unknown kind' });
     } catch (e) {
       console.error(e);

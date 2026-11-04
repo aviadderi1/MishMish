@@ -81,6 +81,12 @@
         store.commit();
       },
       async approveReport(id) { store.s.reports.find((x) => x.id === id).approved = true; store.commit(); },
+      async setPayment(id, amount) {
+        const r = store.s.reports.find((x) => x.id === id);
+        r.payment = amount;
+        store.notify('driver:' + r.driverId, 'תשלום מנהל', `₪${amount.toLocaleString('he-IL')}`);
+        store.commit();
+      },
       async setFee(id, fee) { order(id).fee = fee; store.commit(); },
       watchManagers: (cb) => watch(() => store.s.managers, cb),
       async saveManagers(list) { store.s.managers = list; store.commit(); },
@@ -227,6 +233,7 @@
         return saveThenNotify(col('reports').doc(id).set({ ...r, approved: false, sentAt: now() }, { merge: true }), { kind: 'report', reportId: id });
       },
       approveReport: (id) => col('reports').doc(id).update({ approved: true, approvedAt: now() }),
+      setPayment: (id, amount) => saveThenNotify(col('reports').doc(id).update({ payment: amount, paymentAt: now() }), { kind: 'payment', reportId: id }),
       setFee(id, fee) {
         const w = col('orders').doc(id).update({ fee });
         w.catch((e) => console.error(e));
