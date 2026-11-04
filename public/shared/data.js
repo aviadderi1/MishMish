@@ -158,7 +158,12 @@
       },
       async registerManager(email, password) {
         const c = await auth.createUserWithEmailAndPassword(email, password);
-        try { await call('claimFirstManager', {}); } catch (e) { await c.user.delete(); throw new Error('manager-exists'); }
+        try { await call('claimFirstManager', {}); } catch (e) {
+          console.error(e);
+          await c.user.delete().catch(() => {});
+          if (e.code === 'functions/already-exists') throw new Error('manager-exists');
+          throw e;
+        }
       },
       async signOut() {
         try {

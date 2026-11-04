@@ -241,14 +241,14 @@
     /* ---------- פעולות ---------- */
     const friendly = (e) => {
       const c = (e && (e.code || e.message)) || '';
-      if (/exists/.test(c)) return 'כבר קיים נהג עם המספר הזה.';
-      if (/manager-exists/.test(c)) return 'כבר קיים חשבון מנהל.';
-      if (/email-already/.test(c)) return 'האימייל הזה כבר רשום.';
+      if (/manager-exists/.test(c)) return 'כבר קיים חשבון מנהל. אם זה החשבון שלך, היכנס איתו.';
+      if (/email-already/.test(c)) return 'האימייל הזה כבר רשום. נסה להיכנס איתו.';
       if (/weak-password/.test(c)) return 'הסיסמה צריכה לפחות 6 תווים.';
       if (/invalid-email/.test(c)) return 'כתובת האימייל לא תקינה.';
-      if (/auth|credential|wrong-password|user-not-found/.test(c)) return 'הפרטים לא נכונים.';
-      if (/network|unavailable/.test(c)) return 'אין חיבור לרשת. נסה שוב.';
-      return 'הפעולה נכשלה. נסה שוב.';
+      if (/network/.test(c)) return 'אין חיבור לרשת. נסה שוב.';
+      if (/^exists$|functions\/already-exists/.test(c)) return 'כבר קיים נהג עם המספר הזה.';
+      if (/^auth$|credential|wrong-password|user-not-found/.test(c)) return 'הפרטים לא נכונים.';
+      return `הפעולה נכשלה. נסה שוב. (קוד שגיאה: ${c || 'לא ידוע'})`;
     };
     const run = async (f) => {
       if (st.busy) return;
