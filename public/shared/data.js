@@ -372,7 +372,7 @@
       const m2 = root.querySelector('.main');
       if (m2) m2.scrollTop = top;
       if (fid) {
-        const el = root.querySelector('#' + fid);
+        const el = root.querySelector('#' + CSS.escape(fid));
         if (el) { el.focus(); try { if (pos != null) el.setSelectionRange(pos, pos); } catch (e) { /* סוג שדה ללא סמן */ } }
       }
     }
