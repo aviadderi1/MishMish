@@ -5,7 +5,7 @@ if (self.APP_CONFIG && self.APP_CONFIG.firebase) {
   firebase.messaging(); // הצגת ההתראה מתבצעת אוטומטית
 }
 const CACHE = 'mishloach-manager-v1';
-const SHELL = ['./', 'manifest.json', 'icon-192.png', '../shared/app.css', '../shared/config.js', '../shared/data.js', '../shared/manager.js',
+const SHELL = ['./', 'manifest.json', 'icon-192.png', '../shared/app.css', '../shared/config.js', '../shared/data.js', '../shared/report.js', '../shared/manager.js',
   '../vendor/firebase-app-compat.js', '../vendor/firebase-auth-compat.js', '../vendor/firebase-firestore-compat.js', '../vendor/firebase-functions-compat.js', '../vendor/firebase-messaging-compat.js'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => { e.waitUntil(self.clients.claim()); });

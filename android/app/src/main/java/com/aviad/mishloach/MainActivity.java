@@ -125,6 +125,24 @@ public class MainActivity extends Activity {
       });
     }
 
+    @JavascriptInterface public void openFile(String name, String base64, String mime, boolean share) {
+      try {
+        File dir = new File(getCacheDir(), "reports");
+        dir.mkdirs();
+        File f = new File(dir, name);
+        try (FileOutputStream o = new FileOutputStream(f)) { o.write(android.util.Base64.decode(base64, android.util.Base64.DEFAULT)); }
+        Uri uri = FileProvider.getUriForFile(MainActivity.this, getPackageName() + ".files", f);
+        Intent send = new Intent(Intent.ACTION_SEND).setType(mime).putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        if (!share) {
+          Intent view = new Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+          if (view.resolveActivity(getPackageManager()) != null) { startActivity(view); return; }
+        }
+        startActivity(Intent.createChooser(send, "שליחת הדוח"));
+      } catch (Exception e) {
+        runOnUiThread(() -> Toast.makeText(MainActivity.this, "פתיחת הדוח נכשלה", Toast.LENGTH_LONG).show());
+      }
+    }
+
     @JavascriptInterface public void shareFile(String name, String content) {
       try {
         File dir = new File(getCacheDir(), "reports");

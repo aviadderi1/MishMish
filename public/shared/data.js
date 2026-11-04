@@ -4,17 +4,18 @@
   const dayKey = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const digits = (s) => String(s || '').replace(/\D/g, '');
   const BUSINESS_EMAIL = 'business@mishmish.app'; // חשבון אחד לכל העסק, הסיסמה היא סיסמת העסק
+  const lastDays = (n = 14) => { const out = []; const d = new Date(); for (let i = 0; i < n; i++) { out.push(dayKey(d)); d.setDate(d.getDate() - 1); } return out; };
   const by = (k) => (a, b) => String(a[k] || '').localeCompare(String(b[k] || ''), 'he');
 
   /* ---------- מצב הדגמה ---------- */
-  const KEY = 'mishloach-demo-v2';
+  const KEY = 'mishloach-demo-v3';
   function seed() {
     const a = [['a1', 'צפון'], ['a2', 'מרכז'], ['a3', 'דרום']].map(([id, name]) => ({ id, name }));
     const dr = [['d1', 'משה', '050-000-0201', 'a1'], ['d2', 'עמית', '050-000-0202', 'a2'], ['d3', 'סאמר', '050-000-0203', 'a3']]
       .map(([id, name, phone, areaId]) => ({ id, name, phone, areaId }));
     const o = [['נועה לוי', '052-000-0101', 'חיפה', 'הנשיא 12', 'a1', 'מארז פרימיום × 2', 480], ['יוסי כהן', '052-000-0102', 'קריית אתא', 'הגפן 7', 'a1', 'מארז בסיסי × 1', 150], ['דני אברהם', '052-000-0103', 'פתח תקווה', 'רוטשילד 4', 'a2', 'מארז בסיסי × 2', 300]]
       .map(([customer, phone, city, address, areaId, product, amount], i) => ({ id: 'o' + i, customer, phone, city, address, areaId, product, amount, status: 'new', day: dayKey(), createdAt: Date.now() }));
-    return { areas: a, drivers: dr, orders: o, push: null, seq: 100 };
+    return { areas: a, drivers: dr, orders: o, reports: [], push: null, seq: 100 };
   }
   const store = {
     s: null, subs: new Set(), pushSubs: new Set(), lastPush: null,
@@ -68,7 +69,18 @@
       async updateDriver(id, f) { Object.assign(store.s.drivers.find((d) => d.id === id), f); store.commit(); },
       async deleteDriver(id) { store.s.drivers = store.s.drivers.filter((d) => d.id !== id); store.commit(); },
       watchOrders: (days, cb) => watch(() => store.s.orders.filter((o) => o.status === 'new' || o.status === 'sent' || days.includes(o.day)), cb),
-      watchMine: (uid, cb) => watch(() => store.s.orders.filter((o) => o.driverId === uid && (o.status === 'sent' || o.day === dayKey())), cb),
+      watchMine: (uid, cb) => watch(() => store.s.orders.filter((o) => o.driverId === uid && (o.status === 'sent' || lastDays().includes(o.day))), cb),
+      watchReports: (days, cb) => watch(() => store.s.reports.filter((r) => days.includes(r.day)), cb),
+      watchMyReports: (uid, cb) => watch(() => store.s.reports.filter((r) => r.driverId === uid && lastDays().includes(r.day)), cb),
+      async sendReport(r) {
+        const id = `${r.driverId}_${r.day}`;
+        const old = store.s.reports.find((x) => x.id === id);
+        if (old) Object.assign(old, r, { sentAtMs: Date.now() }); else store.s.reports.push({ ...r, id, approved: false, sentAtMs: Date.now() });
+        const diff = r.counted - r.collected;
+        store.notify('manager', `דוח יום מ${r.driverName}`, `נגבו ₪${r.collected.toLocaleString('he-IL')} · נספרו ₪${r.counted.toLocaleString('he-IL')}${diff ? ` · ${diff < 0 ? 'חסרים' : 'עודף'} ₪${Math.abs(diff).toLocaleString('he-IL')}` : ''}`);
+        store.commit();
+      },
+      async approveReport(id) { store.s.reports.find((x) => x.id === id).approved = true; store.commit(); },
       async saveOrder(o) {
         if (o.id) Object.assign(order(o.id), o);
         else store.s.orders.push({ ...o, id: store.id(), status: 'new', day: dayKey(), createdAt: Date.now() });
@@ -112,6 +124,7 @@
     const auth = fb.auth(), fs = fb.firestore();
     fs.enablePersistence({ synchronizeTabs: true }).catch(() => {});
     const col = (n) => fs.collection(n);
+    const withMs = (r) => ({ ...r, sentAtMs: r.sentAt && r.sentAt.toMillis ? r.sentAt.toMillis() : Date.now() });
     const docs = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     const now = () => fb.firestore.FieldValue.serverTimestamp();
     let currentToken = null;
@@ -180,8 +193,15 @@
       ], cb),
       watchMine: (uid, cb) => merged([
         col('orders').where('driverId', '==', uid).where('status', '==', 'sent'),
-        col('orders').where('driverId', '==', uid).where('day', '==', dayKey())
+        col('orders').where('driverId', '==', uid).where('day', 'in', lastDays())
       ], cb),
+      watchReports: (days, cb) => col('reports').where('day', 'in', days).onSnapshot((s) => cb(docs(s).map(withMs)), (e) => console.error(e)),
+      watchMyReports: (uid, cb) => col('reports').where('driverId', '==', uid).where('day', 'in', lastDays()).onSnapshot((s) => cb(docs(s).map(withMs)), (e) => console.error(e)),
+      sendReport(r) {
+        const id = `${r.driverId}_${r.day}`;
+        return saveThenNotify(col('reports').doc(id).set({ ...r, approved: false, sentAt: now() }, { merge: true }), { kind: 'report', reportId: id });
+      },
+      approveReport: (id) => col('reports').doc(id).update({ approved: true, approvedAt: now() }),
       saveOrder(o) {
         const { id, ...f } = o;
         if (id) return col('orders').doc(id).update(f);

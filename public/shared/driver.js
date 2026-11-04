@@ -7,7 +7,7 @@
     root.classList.add('app', 'drv');
     const ID_KEY = 'mishmish-driver-id';
     const readId = () => { try { return localStorage.getItem(ID_KEY); } catch (e) { return null; } };
-    const st = { user: undefined, driverId: readId(), drivers: [], me: null, orders: [], open: null, password: db.demo ? '123456' : '', err: '', busy: false };
+    const st = { user: undefined, driverId: readId(), drivers: [], me: null, orders: [], reports: [], open: null, close: null, cash: null, password: db.demo ? '123456' : '', err: '', busy: false };
     let unsub = [];
 
     const hiddenTel = (phone) => `tel:%2331%23${db.digits(phone)}`; // #31# = חיוג מחסוי
@@ -30,27 +30,87 @@
       </main>`;
     }
 
+    const dateLabel = (day) => new Date(day + 'T12:00').toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const reportOf = (day) => st.reports.find((r) => r.day === day);
+
     function listView() {
-      const open = st.orders.filter((o) => o.status === 'sent');
-      const done = st.orders.filter((o) => o.status !== 'sent');
-      const paid = done.filter((o) => o.status === 'paid');
-      const all = st.orders.reduce((s, o) => s + o.amount, 0);
-      const got = paid.reduce((s, o) => s + o.amount, 0);
       const pushOff = !db.demo && db.pushSupported() && db.pushState() !== 'granted';
-      return `<header class="hdr"><div class="sub" style="font-size:16px">שלום ${esc((st.me && st.me.name) || '')}</div><h1>המשלוחים שלי</h1>
-        <div class="sub" style="font-size:16px">${paid.length} מתוך ${st.orders.length} נמסרו · ${money(got)} מתוך ${money(all)}</div></header>
-      <main class="main">
+      const today = db.today();
+      const days = [...new Set(st.orders.map((o) => o.day).concat(st.reports.map((r) => r.day)))].sort().reverse();
+      const firstOpen = st.orders.filter((o) => o.status === 'sent').map((o) => o.id)[0];
+      const rank = { sent: 0, paid: 1, failed: 2 };
+      const group = (day) => {
+        const os = st.orders.filter((o) => o.day === day).sort((a, b) => rank[a.status] - rank[b.status]);
+        const rep = reportOf(day);
+        const got = os.filter((o) => o.status === 'paid').reduce((s, o) => s + o.amount, 0);
+        return `<section style="display:flex;flex-direction:column;gap:8px;flex-shrink:0">
+          <div class="row" style="align-items:baseline"><h2 style="font-size:17px;color:#F2A33A">${dateLabel(day)}</h2><span class="mut">${rep ? 'נספר ' + money(rep.counted) : money(got)}</span></div>
+          ${os.map((o) => o.status === 'sent'
+            ? `<button type="button" class="stop ${o.id === firstOpen ? 'next' : ''}" data-a="open" data-v="${esc(o.id)}">
+                <span class="row" style="align-items:baseline"><span style="font-size:20px;font-weight:700">${esc(o.customer)}</span><span class="amt">${money(o.amount)}</span></span>
+                <span style="color:#D5DED8">${esc([o.address, o.city].filter(Boolean).join(', '))}</span>
+                <span class="mut" style="font-size:15px">${esc(o.product)}</span></button>`
+            : `<div class="stop isdone" style="cursor:default;opacity:1"><span class="row"><span style="font-weight:600">${esc(o.customer)}</span><span style="font-weight:700">${money(o.amount)}</span></span>
+                <span class="row"><span class="mut">${esc(o.city)}</span><span style="font-size:13px;color:${o.status === 'paid' ? '#5BD29A' : '#F2A33A'}">${o.status === 'paid' ? 'שולם' : 'לא נמסר' + (o.failReason ? ' · ' + esc(o.failReason) : '')}</span></span></div>`).join('')}
+          ${rep && rep.approved ? '<div class="mut">הדוח אושר על ידי המנהל</div>' : ''}
+          ${day !== today && os.length && !(rep && rep.approved) ? `<button class="btn ghost" type="button" data-a="closeDay" data-v="${day}">${rep ? 'עדכון הסיכום של היום הזה' : 'שליחת סיכום ליום הזה'}</button>` : ''}
+        </section>`;
+      };
+      const todayOrders = st.orders.filter((o) => o.day === today);
+      const todayRep = reportOf(today);
+      return `<header class="hdr"><div class="sub" style="font-size:16px">שלום ${esc((st.me && st.me.name) || '')}</div><h1>המשלוחים שלי</h1></header>
+      <main class="main" style="gap:16px">
         ${pushOff ? '<div class="card pad"><div>הפעל התראות כדי לדעת מיד כשמגיעים משלוחים חדשים.</div><button class="btn small" type="button" data-a="enablePush">הפעלת התראות</button></div>' : ''}
-        ${open.map((o, i) => `<button type="button" class="stop ${i === 0 ? 'next' : ''}" data-a="open" data-v="${esc(o.id)}">
-          <span class="row" style="align-items:baseline"><span style="font-size:20px;font-weight:700">${esc(o.customer)}</span><span class="amt">${money(o.amount)}</span></span>
-          <span style="color:#D5DED8">${esc([o.address, o.city].filter(Boolean).join(', '))}</span>
-          <span class="mut" style="font-size:15px">${esc(o.product)}</span></button>`).join('')}
-        ${!open.length && !done.length ? '<div class="empty">אין לך משלוחים כרגע.<br>כשהמנהל ישלח לך, הם יופיעו כאן.</div>' : ''}
-        ${!open.length && done.length ? '<div class="empty" style="padding:16px">סיימת את כל המשלוחים.</div>' : ''}
-        ${done.length ? `<h2 class="mut" style="font-size:15px;margin-top:6px">הסתיימו</h2>` : ''}
-        ${done.map((o) => `<div class="stop isdone" style="cursor:default"><span class="row"><span style="font-weight:600">${esc(o.customer)}</span><span style="font-weight:600">${o.status === 'paid' ? `שולם ${money(o.amount)}` : 'לא נמסר'}</span></span>${o.failReason ? `<span class="mut">${esc(o.failReason)}</span>` : ''}</div>`).join('')}
+        ${days.length ? days.map(group).join('') : '<div class="empty">אין לך משלוחים כרגע.<br>כשהמנהל ישלח לך, הם יופיעו כאן.</div>'}
         <button class="link" type="button" data-a="switchDriver">לא ${esc((st.me && st.me.name) || 'אתה')}? החלפת נהג</button>
-      </main>`;
+      </main>
+      ${todayOrders.length && !(todayRep && todayRep.approved) ? `<div class="footer" style="background:transparent"><button class="btn" style="min-height:58px;font-size:18px;font-weight:700" type="button" data-a="closeDay" data-v="${today}">${todayRep ? 'עדכון הסיכום ושליחה מחדש' : 'סיום יום וספירת כסף'}</button></div>` : ''}`;
+    }
+
+    function closeNumbers() {
+      const os = st.orders.filter((o) => o.day === st.close.day);
+      const paid = os.filter((o) => o.status === 'paid');
+      return { os, paid, failed: os.filter((o) => o.status === 'failed'), open: os.filter((o) => o.status === 'sent'), collected: paid.reduce((s, o) => s + o.amount, 0) };
+    }
+
+    function closeView() {
+      const c = st.close, n = closeNumbers();
+      const counted = Number(String(c.counted).replace(/[^\d.]/g, ''));
+      const has = String(c.counted).trim() !== '' && !Number.isNaN(counted);
+      const diff = counted - n.collected;
+      return `<header class="hdr"><div class="row"><div class="sub">${dateLabel(c.day)}</div><button class="btn hdrbtn" type="button" data-a="closeBack">חזרה</button></div><h1>סיכום יום</h1></header>
+      <main class="main">
+        ${st.err ? `<div class="err" role="alert">${esc(st.err)}</div>` : ''}
+        <section class="card pad" style="gap:10px;padding:16px">
+          <div class="row"><span style="color:#D5DED8">נמסרו</span><b>${n.paid.length} משלוחים</b></div>
+          <div class="row"><span style="color:#D5DED8">לא נמסרו</span><b>${n.failed.length + n.open.length}</b></div>
+          <div class="row" style="align-items:baseline;border-top:1px solid var(--line);padding-top:10px"><span style="color:#D5DED8">צריך להיות אצלך</span><b style="font-size:26px">${money(n.collected)}</b></div>
+        </section>
+        ${n.open.length ? `<div class="err" role="status">עדיין יש ${n.open.length} משלוחים פתוחים. הם יופיעו בדוח כלא הושלמו.</div>` : ''}
+        <div class="field"><label for="counted" style="font-size:17px;font-weight:600">כמה כסף ספרת? (₪)</label><input id="counted" class="big" style="height:68px;font-size:32px;border-color:#F2A33A" data-f="counted" inputmode="decimal" value="${esc(c.counted)}" autocomplete="off"></div>
+        <button class="btn ghost" style="color:#F2A33A;border-color:#F2A33A" type="button" data-a="openCash">ספירה עם טבלת שטרות</button>
+        ${has ? (diff === 0 ? '<div class="tag" role="status" style="padding:12px 14px;font-size:16px">הסכום תואם</div>' : `<div class="err" role="status" style="font-size:16px;font-weight:600">${diff < 0 ? 'חסרים' : 'יש עודף של'} ${money(Math.abs(diff))} לעומת הסכום שנגבה</div>`) : ''}
+        <div class="field"><label for="cnote">הערה למנהל (לא חובה)</label><input id="cnote" data-f="note" value="${esc(c.note)}" autocomplete="off"></div>
+      </main>
+      <div class="footer" style="background:transparent;padding-bottom:18px"><button class="btn done" style="min-height:64px;font-size:20px" type="button" data-a="sendReport" ${st.busy ? 'disabled' : ''}>${reportOf(c.day) ? 'שליחה מחדש למנהל' : 'שליחת הסיכום למנהל'}</button></div>`;
+    }
+
+    const NOTES = [[200, '#1F5FA8'], [100, '#B8660F'], [50, '#23784F'], [20, '#B3363A']];
+    function cashView() {
+      const c = st.cash;
+      const total = NOTES.reduce((s, [v]) => s + v * c[v], 0);
+      return `<header class="hdr"><div class="row"><h1>טבלת כסף</h1><button class="btn hdrbtn" type="button" data-a="cashBack">חזרה</button></div><div class="sub">לחיצה על שטר מוסיפה אותו לספירה</div></header>
+      <main class="main" style="gap:10px">
+        ${NOTES.map(([v, color]) => `<div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+          <button type="button" class="note" data-a="noteAdd" data-v="${v}" aria-label="הוספת שטר ${v} שקלים" style="background:${color}">
+            <i class="n1"></i><i class="n2"></i><i class="n3"></i><b>${v}</b><span>שקלים</span></button>
+          <div class="note-side"><b>× ${c[v]}</b><span class="mut">${money(v * c[v])}</span><button type="button" data-a="noteSub" data-v="${v}" aria-label="הורדת שטר ${v}">−</button></div>
+        </div>`).join('')}
+      </main>
+      <div class="footer" style="background:transparent;padding-bottom:18px">
+        <div class="row" style="align-items:baseline"><span style="font-size:17px;color:#D5DED8">סך הכול</span><b style="font-size:34px;color:#F2A33A">${money(total)}</b></div>
+        <button class="btn done" style="min-height:60px;font-size:19px" type="button" data-a="cashApply">אישור והעברה לספירה</button>
+      </div>`;
     }
 
     function detailView(o) {
@@ -72,7 +132,7 @@
     function draw() {
       if (st.user === undefined) return;
       const o = st.open && st.orders.find((x) => x.id === st.open && x.status === 'sent');
-      const v = !st.user ? loginView() : !st.driverId ? pickView() : o ? detailView(o) : listView();
+      const v = !st.user ? loginView() : !st.driverId ? pickView() : st.cash ? cashView() : st.close ? closeView() : o ? detailView(o) : listView();
       g.UI.render(root, (db.demo ? '<div class="demo">מצב הדגמה</div>' : '') + v);
     }
 
@@ -96,6 +156,28 @@
           draw();
         });
       },
+      closeDay(v) { const r = reportOf(v); st.err = ''; st.close = { day: v, counted: r ? String(r.counted) : '', note: r ? r.note || '' : '' }; draw(); const m = root.querySelector('.main'); if (m) m.scrollTop = 0; },
+      closeBack() { st.close = null; st.err = ''; draw(); },
+      openCash() { st.cash = { 200: 0, 100: 0, 50: 0, 20: 0 }; draw(); },
+      cashBack() { st.cash = null; draw(); },
+      noteAdd(v) { st.cash[v]++; draw(); },
+      noteSub(v) { st.cash[v] = Math.max(0, st.cash[v] - 1); draw(); },
+      cashApply() { st.close.counted = String(NOTES.reduce((s, [v]) => s + v * st.cash[v], 0)); st.cash = null; draw(); },
+      sendReport() {
+        const counted = Number(String(st.close.counted).replace(/[^\d.]/g, ''));
+        if (String(st.close.counted).trim() === '' || Number.isNaN(counted)) { st.err = 'כתוב כמה כסף ספרת.'; return draw(); }
+        const c = st.close, n = closeNumbers();
+        const rows = n.os.map((o) => ({ customer: o.customer, city: o.city, product: o.product, status: o.status, amount: o.amount }));
+        (async () => {
+          st.busy = true; st.err = ''; draw();
+          try {
+            await db.sendReport({ driverId: st.driverId, driverName: (st.me && st.me.name) || '', driverPhone: (st.me && st.me.phone) || '', day: c.day, counted, collected: n.collected, note: c.note.trim(), rows });
+            st.close = null;
+            g.UI.toast(root, 'הסיכום נשלח למנהל', money(counted));
+          } catch (e) { console.error(e); st.err = 'השליחה נכשלה. נסה שוב.'; }
+          st.busy = false; draw();
+        })();
+      },
       pick(v) { setDriver(v); },
       switchDriver() { setDriver(null); },
       async enablePush() { await db.enablePush().catch((e) => console.error(e)); draw(); }
@@ -105,7 +187,12 @@
       const b = e.target.closest('[data-a]');
       if (b && root.contains(b) && actions[b.dataset.a]) actions[b.dataset.a](b.dataset.v);
     });
-    root.addEventListener('input', (e) => { if (e.target.dataset && e.target.dataset.f) st.password = e.target.value; });
+    root.addEventListener('input', (e) => {
+      const f = e.target.dataset && e.target.dataset.f;
+      if (!f) return;
+      if (f === 'password') st.password = e.target.value;
+      else if (st.close) { st.close[f] = e.target.value; if (f === 'counted') draw(); }
+    });
     root.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!st.password) { st.err = 'הזן סיסמה.'; return draw(); }
@@ -118,18 +205,21 @@
     g.handleBack = () => {
       const sc = root.querySelector(':scope > .scrim');
       if (sc) { sc.remove(); return true; }
+      if (st.cash) { actions.cashBack(); return true; }
+      if (st.close) { actions.closeBack(); return true; }
       if (st.open) { actions.back(); return true; }
       return false;
     };
     db.onPush((p) => { g.UI.toast(root, p.title, p.body); });
     function subscribe() {
       unsub.forEach((f) => f()); unsub = [];
-      st.me = null; st.orders = []; st.open = null;
+      st.me = null; st.orders = []; st.reports = []; st.open = null; st.close = null; st.cash = null;
       if (!st.user) return;
       unsub.push(db.watchDrivers((d) => { st.drivers = d; draw(); }));
       if (st.driverId) {
         unsub.push(db.watchMe(st.driverId, (m) => { st.me = m; draw(); }));
         unsub.push(db.watchMine(st.driverId, (o) => { st.orders = o; draw(); }));
+        unsub.push(db.watchMyReports(st.driverId, (r) => { st.reports = r; draw(); }));
       }
     }
     function setDriver(id) {

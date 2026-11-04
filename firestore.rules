@@ -6,6 +6,7 @@ service cloud.firestore {
     match /areas/{id} { allow read, write: if business(); }
     match /drivers/{id} { allow read, write: if business(); }
     match /orders/{id} { allow read, write: if business(); }
+    match /reports/{id} { allow read, write: if business(); }
     match /tokens/{id} { allow read, write: if business(); }
   }
 }

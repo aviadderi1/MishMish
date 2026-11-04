@@ -93,6 +93,14 @@ export default {
         const body = paid ? `${val(o.driverName)} מסר ל${val(o.customer)} ב${val(o.city)}` : `${val(o.driverName)} · ${val(o.customer)} · ${val(o.failReason) || ''}`;
         return reply(200, { sent: await pushTo(ctx, 'manager', title, body) });
       }
+      if (d.kind === 'report') {
+        const r = await fetch(`https://firestore.googleapis.com/v1/projects/${ctx.project}/databases/(default)/documents/reports/${encodeURIComponent(d.reportId)}`, { headers: { Authorization: `Bearer ${ctx.token}` } });
+        if (!r.ok) return reply(404, { error: 'report not found' });
+        const f = (await r.json()).fields || {};
+        const diff = val(f.counted) - val(f.collected);
+        const tail = diff ? ` · ${diff < 0 ? 'חסרים' : 'עודף'} ${money(Math.abs(diff))}` : '';
+        return reply(200, { sent: await pushTo(ctx, 'manager', `דוח יום מ${val(f.driverName)}`, `נגבו ${money(val(f.collected))} · נספרו ${money(val(f.counted))}${tail}`) });
+      }
       return reply(400, { error: 'unknown kind' });
     } catch (e) {
       console.error(e);

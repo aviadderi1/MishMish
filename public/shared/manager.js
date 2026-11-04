@@ -7,7 +7,7 @@
   g.mountManager = function (root, db) {
     root.classList.add('app', 'mgr');
     const st = {
-      user: undefined, tab: 'new', sub: null, areas: [], drivers: [], orders: [], sel: new Set(),
+      user: undefined, tab: 'new', sub: null, areas: [], drivers: [], orders: [], sel: new Set(), reports: [],
       order: emptyOrder(), driver: emptyDriver(), editDriverId: null, pick: null, created: null,
       login: { password: db.demo ? '123456' : '', register: false }, newArea: '', editArea: null, err: '', busy: false,
       day: db.today(), showDetail: false, openDriver: null, pushAsked: false
@@ -19,13 +19,15 @@
     const dayDays = () => [...new Set([db.today(), st.day])];
     const subOrders = () => {
       if (unsubOrders) unsubOrders();
-      unsubOrders = db.watchOrders(dayDays(), (o) => { st.orders = o; draw(); });
+      const a = db.watchOrders(dayDays(), (o) => { st.orders = o; draw(); });
+      const b = db.watchReports(dayDays(), (r) => { st.reports = r; draw(); });
+      unsubOrders = () => { a(); b(); };
     };
 
     /* ---------- מסכים ---------- */
     const hdr = (title, sub, extra = '') => `<header class="hdr"><div class="row"><h1>${title}</h1>${extra}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</header>`;
     const nav = () => `<nav class="nav" aria-label="ניווט ראשי">${[['new', 'חדשה'], ['orders', 'הזמנות'], ['track', 'מעקב'], ['summary', 'סיכום'], ['drivers', 'נהגים']]
-      .map(([k, t]) => `<button type="button" data-a="tab" data-v="${k}" class="${st.tab === k && !st.sub ? 'on' : ''}">${t}</button>`).join('')}</nav>`;
+      .map(([k, t]) => `<button type="button" data-a="tab" data-v="${k}" class="${st.tab === k && (!st.sub || st.sub === 'reports') ? 'on' : ''}">${t}</button>`).join('')}</nav>`;
     const err = () => (st.err ? `<div class="err" role="alert">${esc(st.err)}</div>` : '');
     const field = (id, label, form, key, attrs = '') => `<div class="field"><label for="${id}">${label}</label><input id="${id}" data-f="${form}.${key}" value="${esc(st[form][key])}" ${attrs}></div>`;
     const areaSelect = (id, form, withNew) => `<div class="field"><label for="${id}">אזור</label>
@@ -151,6 +153,7 @@
           <div style="display:flex;gap:6px"><button class="btn hdrbtn" type="button" data-a="dayShift" data-v="-1" aria-label="יום קודם">הקודם</button>${isToday ? '' : '<button class="btn hdrbtn" type="button" data-a="dayShift" data-v="1" aria-label="יום הבא">הבא</button>'}</div></div>
         <div class="hero">${money(got)}</div><div class="sub">נגבו במזומן מתוך ${money(all)}</div></header>
       <main class="main">
+        <button class="btn" type="button" data-a="reports">דוחות נהגים (${st.reports.filter((r) => r.day === st.day).length})</button>
         <div class="two">
           <div class="card pad" style="gap:2px"><b style="font-size:23px">${paid.length} מתוך ${os.length}</b><span class="mut">משלוחים נמסרו</span></div>
           <div class="card pad" style="gap:2px;background:#F9E7D8;color:#6F2D08;border:0"><b style="font-size:23px">${money(all - got)}</b><span style="font-size:14px">לא נגבו</span></div>
@@ -165,6 +168,29 @@
         ${st.showDetail ? `<section class="card pad"><table class="tbl"><tbody>${os.map((o) => `<tr><td>${esc(o.customer)}<div class="mut">${esc(o.product)} · ${esc(o.driverName)}</div></td><td class="b">${money(o.amount)}</td><td>${o.status === 'paid' ? `<button class="link" type="button" data-a="reopen" data-v="${esc(o.id)}" style="font-size:13px">ביטול סימון</button>` : ''}</td></tr>`).join('')}</tbody></table></section>` : ''}
         ${db.demo ? '' : '<button class="btn ghost" type="button" data-a="csv">ייצוא דוח לאקסל</button>'}` : ''}
         ${db.demo ? '<button class="link" type="button" data-a="resetDemo">איפוס נתוני ההדגמה</button>' : ''}
+      </main>${nav()}`;
+    }
+
+    function reportsView() {
+      const label = new Date(st.day + 'T12:00').toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      const os = st.orders.filter((o) => o.day === st.day && ['sent', 'paid', 'failed'].includes(o.status));
+      const reps = st.reports.filter((r) => r.day === st.day);
+      const waiting = [...new Set(os.map((o) => o.driverId))].filter((id) => !reps.some((r) => r.driverId === id));
+      const tag = (r) => {
+        const d = r.counted - r.collected;
+        return d === 0 ? '<span class="tag">תואם</span>' : `<span class="tag warn">${d < 0 ? 'חסרים' : 'עודף'} ${money(Math.abs(d))}</span>`;
+      };
+      return `${hdr('דוחות נהגים', label, '<button class="btn hdrbtn" type="button" data-a="back">חזרה</button>')}
+      <main class="main">${err()}
+        ${reps.map((r) => `<section class="card pad">
+          <div class="row"><h2 style="font-size:17px">${esc(r.driverName)}</h2>${tag(r)}</div>
+          <div class="mut" style="color:#3F4B45">${(r.rows || []).filter((x) => x.status === 'paid').length} נמסרו · נגבו ${money(r.collected)} · נספרו ${money(r.counted)}</div>
+          ${r.note ? `<div class="mut">הערה: ${esc(r.note)}</div>` : ''}
+          <div class="two"><button class="btn ghost" type="button" data-a="openPdf" data-v="${esc(r.id)}">פתיחת דוח PDF</button><button class="btn ghost" type="button" data-a="sharePdf" data-v="${esc(r.id)}">שיתוף</button></div>
+          ${r.approved ? '<span class="tag" style="align-self:flex-start">הדוח אושר</span>' : `<button class="btn" type="button" data-a="approve" data-v="${esc(r.id)}">אישור דוח</button>`}
+        </section>`).join('')}
+        ${waiting.map((id) => { const d = os.filter((o) => o.driverId === id); return `<section class="card pad"><div class="row"><h2 style="font-size:17px">${esc(d[0].driverName)}</h2><span class="tag wait">טרם נשלח</span></div><div class="mut">${d.filter((o) => o.status === 'paid').length} מתוך ${d.length} נמסרו · נגבו ${money(d.filter((o) => o.status === 'paid').reduce((s, o) => s + o.amount, 0))}</div></section>`; }).join('')}
+        ${!reps.length && !waiting.length ? '<div class="empty">אין דוחות ליום הזה.</div>' : ''}
       </main>${nav()}`;
     }
 
@@ -232,6 +258,7 @@
       else if (st.sub === 'driverForm') v = driverForm();
       else if (st.sub === 'created') v = createdView();
       else if (st.sub === 'areas') v = areasView();
+      else if (st.sub === 'reports') v = reportsView();
       else v = { new: newView, orders: ordersView, track: trackView, summary: summaryView, drivers: driversView }[st.tab]();
       g.UI.render(root, (db.demo ? '<div class="demo">מצב הדגמה · נתונים לדוגמה</div>' : '') + v);
     }
@@ -346,6 +373,10 @@
         const d = new Date(st.day + 'T12:00'); d.setDate(d.getDate() + Number(v));
         st.day = db.today(d); st.showDetail = false; subOrders(); draw();
       },
+      reports() { go(() => { st.sub = 'reports'; }); },
+      approve(v) { run(() => db.approveReport(v)); },
+      openPdf(v) { const r = st.reports.find((x) => x.id === v); run(() => g.Report.open(r, false)); },
+      sharePdf(v) { const r = st.reports.find((x) => x.id === v); run(() => g.Report.open(r, true)); },
       toggleDetail() { st.showDetail = !st.showDetail; draw(); },
       returnOrder(v) { run(() => db.returnToOrders(v)); },
       reopen(v) {

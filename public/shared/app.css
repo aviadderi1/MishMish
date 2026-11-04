@@ -86,3 +86,14 @@ button,input,select{font:inherit}
 .tbl{width:100%;border-collapse:collapse;font-size:14px}
 .tbl td{padding:8px 2px;border-top:1px solid #E8EBE6;vertical-align:middle}
 .tap.pad{display:flex;padding:12px 14px}
+.note{position:relative;flex:1;min-width:0;height:100px;padding:0;border:0;border-radius:8px;color:#fff;overflow:hidden;cursor:pointer;box-shadow:0 3px 8px rgba(0,0,0,.45)}
+.note:active{transform:scale(.97)}
+.note i{position:absolute;display:block}
+.note .n1{inset:6px;border:1.5px solid rgba(255,255,255,.65);border-radius:4px}
+.note .n2{left:22px;top:18px;width:64px;height:64px;border-radius:50%;border:2px solid rgba(255,255,255,.55);background:rgba(255,255,255,.14)}
+.note .n3{left:34px;top:30px;width:40px;height:40px;border-radius:50%;border:1.5px solid rgba(255,255,255,.45)}
+.note b{position:absolute;right:20px;top:14px;font-size:42px;line-height:1.1}
+.note span{position:absolute;right:20px;bottom:13px;font-size:14px;font-weight:500}
+.note-side{width:84px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:2px}
+.note-side b{font-size:24px}
+.note-side button{width:72px;height:44px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font-size:24px;cursor:pointer}
