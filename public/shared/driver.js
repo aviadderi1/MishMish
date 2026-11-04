@@ -7,8 +7,71 @@
     root.classList.add('app', 'drv');
     const ID_KEY = 'mishmish-driver-id';
     const readId = () => { try { return localStorage.getItem(ID_KEY); } catch (e) { return null; } };
-    const st = { user: undefined, driverId: readId(), drivers: [], me: null, orders: [], reports: [], open: null, close: null, cash: null, password: db.demo ? '123456' : '', err: '', busy: false };
+    const st = { user: undefined, driverId: readId(), drivers: [], me: null, orders: [], reports: [], routes: {}, routing: null, settings: false, startDraft: null, open: null, close: null, cash: null, password: db.demo ? '123456' : '', err: '', busy: false };
     let unsub = [];
+
+    const DEFAULT_START = 'ציפורן 4, עפולה';
+    const startOf = () => (st.me && st.me.startAddress) || DEFAULT_START;
+    const store = {
+      get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+      set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* עד הסגירה */ } }
+    };
+    const routeKey = (day) => `mishmish-route-${st.driverId}-${day}`;
+    const routeOf = (day) => st.routes[day] || (st.routes[day] = store.get(routeKey(day)));
+    const openOf = (day) => {
+      const os = st.orders.filter((o) => o.day === day && o.status === 'sent');
+      const r = routeOf(day);
+      if (!r) return os;
+      const rank = (o) => { const i = r.ids.indexOf(o.id); return i < 0 ? 1e6 : i; };
+      return os.sort((a, b) => rank(a) - rank(b));
+    };
+    const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+    let lastGeo = 0;
+    async function geocode(address) {
+      const cache = store.get('mishmish-geo') || {};
+      if (cache[address]) return cache[address];
+      const wait = 1100 - (Date.now() - lastGeo); // שירות המפות מאפשר בקשה אחת בשנייה
+      if (wait > 0) await sleep(wait);
+      lastGeo = Date.now();
+      const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=il&accept-language=he&q=${encodeURIComponent(address)}`);
+      if (!r.ok) throw new Error('geo ' + r.status);
+      const j = await r.json();
+      if (!j.length) return null;
+      cache[address] = [Number(j[0].lon), Number(j[0].lat)];
+      store.set('mishmish-geo', cache);
+      return cache[address];
+    }
+    async function planRoute(day) {
+      const os = st.orders.filter((o) => o.day === day && o.status === 'sent');
+      if (!os.length || st.routing) return;
+      st.routing = day; draw();
+      try {
+        const start = startOf();
+        const from = await geocode(start);
+        if (!from) { g.UI.toast(root, 'נקודת היציאה לא נמצאה במפה', 'בדוק אותה בהגדרות'); return; }
+        const found = [], missing = [];
+        for (const o of os) {
+          const c = o.address ? await geocode(`${o.address}, ${o.city}`) : null;
+          if (c) found.push({ id: o.id, c }); else missing.push(o.id);
+        }
+        if (!found.length) { g.UI.toast(root, 'אף כתובת לא נמצאה במפה', 'בדוק את הכתובות בהזמנות'); return; }
+        const coords = [from].concat(found.map((f) => f.c)).map((c) => c.join(',')).join(';');
+        const r = await fetch(`https://router.project-osrm.org/trip/v1/driving/${coords}?source=first&destination=any&roundtrip=false&overview=false`);
+        const j = await r.json();
+        if (j.code !== 'Ok') throw new Error('route ' + j.code);
+        const legs = j.trips[0].legs;
+        const ordered = found.map((f, i) => ({ id: f.id, at: j.waypoints[i + 1].waypoint_index })).sort((a, b) => a.at - b.at);
+        const legKm = {};
+        ordered.forEach((x) => { legKm[x.id] = Math.round(legs[x.at - 1].distance / 1000); });
+        st.routes[day] = { ids: ordered.map((x) => x.id).concat(missing), legKm, missing, km: Math.round(j.trips[0].distance / 1000), start };
+        store.set(routeKey(day), st.routes[day]);
+      } catch (e) {
+        console.error(e);
+        g.UI.toast(root, 'המסלול לא חושב', 'בדוק אינטרנט ונסה שוב');
+      } finally {
+        st.routing = null; draw();
+      }
+    }
 
     const hiddenTel = (phone) => `tel:%2331%23${db.digits(phone)}`; // #31# = חיוג מחסוי
     const waze = (o) => `https://waze.com/ul?q=${encodeURIComponent([o.address, o.city].filter(Boolean).join(', '))}&navigate=yes`;
@@ -37,20 +100,26 @@
       const pushOff = !db.demo && db.pushSupported() && db.pushState() !== 'granted';
       const today = db.today();
       const days = [...new Set(st.orders.map((o) => o.day).concat(st.reports.map((r) => r.day)))].sort().reverse();
-      const firstOpen = st.orders.filter((o) => o.status === 'sent').map((o) => o.id)[0];
       const rank = { sent: 0, paid: 1, failed: 2 };
       const group = (day) => {
-        const os = st.orders.filter((o) => o.day === day).sort((a, b) => rank[a.status] - rank[b.status]);
+        const route = routeOf(day);
+        const openNow = openOf(day);
+        const firstOpen = openNow.length ? openNow[0].id : null;
+        const os = openNow.concat(st.orders.filter((o) => o.day === day && o.status !== 'sent').sort((a, b) => rank[a.status] - rank[b.status]));
         const rep = reportOf(day);
         const got = os.filter((o) => o.status === 'paid').reduce((s, o) => s + o.amount, 0);
         return `<section style="display:flex;flex-direction:column;gap:8px;flex-shrink:0">
           <div class="row" style="align-items:baseline"><h2 style="font-size:17px;color:#F2A33A">${dateLabel(day)}</h2><span class="mut">${rep ? 'נספר ' + money(rep.counted) : money(got)}</span></div>
           ${rep && rep.payment != null ? `<div class="card" style="border:2px solid #5BD29A;display:flex;justify-content:space-between;align-items:center;padding:12px 14px"><span style="font-weight:600">תשלום מנהל</span><b style="font-size:22px;color:#5BD29A">${money(rep.payment)}</b></div>` : ''}
+          ${openNow.length ? `<button class="btn" style="min-height:54px;font-size:17px;font-weight:700" type="button" data-a="plan" data-v="${day}" ${st.routing ? 'disabled' : ''}>${st.routing === day ? 'מחשב מסלול...' : 'תכנן נסיעה'}</button>` : ''}
+          ${route && openNow.length ? `<div class="row" style="font-size:14px;color:#D5DED8"><span>יציאה: ${esc(route.start)}</span><b>מסלול של ${route.km} ק"מ</b></div>` : ''}
           ${os.map((o) => o.status === 'sent'
             ? `<button type="button" class="stop ${o.id === firstOpen ? 'next' : ''}" data-a="open" data-v="${esc(o.id)}">
-                <span class="row" style="align-items:baseline"><span style="font-size:20px;font-weight:700">${esc(o.customer)}</span><span class="amt">${money(o.amount)}</span></span>
+                <span class="row" style="align-items:baseline"><span style="font-size:20px;font-weight:700">${route && route.legKm[o.id] != null ? `<span class="rnum">${route.ids.indexOf(o.id) + 1}</span>` : ''}${esc(o.customer)}</span><span class="amt">${money(o.amount)}</span></span>
                 <span style="color:#D5DED8">${esc([o.address, o.city].filter(Boolean).join(', '))}</span>
-                <span class="mut" style="font-size:15px">${esc(o.product)}</span></button>`
+                <span class="mut" style="font-size:15px">${esc(o.product)}</span>
+                ${route && route.legKm[o.id] != null ? `<span class="mut" style="font-size:13px">${route.legKm[o.id]} ק"מ מ${route.ids[0] === o.id ? 'נקודת היציאה' : 'העצירה הקודמת'}</span>` : ''}
+                ${route && route.missing.includes(o.id) ? '<span style="font-size:14px;color:#F4D7A8">הכתובת לא נמצאה במפה, לכן הלקוח בסוף הרשימה</span>' : ''}</button>`
             : `<div class="stop isdone" style="cursor:default;opacity:1"><span class="row"><span style="font-weight:600">${esc(o.customer)}</span><span style="font-weight:700">${money(o.amount)}</span></span>
                 <span class="row"><span class="mut">${esc(o.city)}</span><span style="font-size:13px;color:${o.status === 'paid' ? '#5BD29A' : '#F2A33A'}">${o.status === 'paid' ? 'שולם' : 'לא נמסר' + (o.failReason ? ' · ' + esc(o.failReason) : '')}</span></span>
                 ${rep && rep.approved
@@ -75,6 +144,9 @@
     function settingsView() {
       return `<header class="hdr"><div class="row"><h1>הגדרות</h1><button class="btn hdrbtn" style="border-color:#2E4139" type="button" data-a="settingsBack">חזרה</button></div></header>
       <main class="main">
+        <form class="card pad" data-submit="start"><h2 style="font-size:17px">נקודת מוצא</h2>
+          <div class="field"><label for="startaddr">הכתובת שממנה המסלול מתחיל</label><input id="startaddr" data-f="start" value="${esc(st.startDraft != null ? st.startDraft : startOf())}" autocomplete="off"></div>
+          <button class="btn ghost" style="color:#F2A33A;border-color:#F2A33A" type="submit">שמירת נקודת המוצא</button></form>
         <section class="card pad"><h2 style="font-size:17px">מחיקת הנתונים שלי</h2>
           <div class="mut">מוחק מהאפליקציה שלך משלוחים שנסגרו ודוחות. אצל המנהל הם נשארים.</div>
           <button class="btn ghost" style="color:#F2A33A;border-color:#F2A33A" type="button" data-a="clearAsk">מחיקת הנתונים שלי</button></section>
@@ -132,7 +204,7 @@
     }
 
     function detailView(o) {
-      const open = st.orders.filter((x) => x.status === 'sent');
+      const open = openOf(o.day);
       const idx = open.findIndex((x) => x.id === o.id);
       return `<header class="hdr"><div class="row"><div class="sub">משלוח ${idx + 1} מתוך ${open.length}</div><button class="btn hdrbtn" type="button" data-a="back">לרשימה</button></div>
         <h1 style="font-size:32px">${esc(o.customer)}</h1><div style="font-size:18px;color:#D5DED8">${esc([o.address, o.city].filter(Boolean).join(', '))}</div></header>
@@ -174,7 +246,8 @@
           draw();
         });
       },
-      settings() { st.settings = true; draw(); },
+      settings() { st.settings = true; st.startDraft = null; draw(); },
+      plan(day) { planRoute(day); },
       settingsBack() { st.settings = false; draw(); },
       clearAsk() {
         g.UI.sheet(root, `<h2 style="color:#F2A33A">למחוק את הנתונים שלך?</h2><div style="line-height:1.5">משלוחים שנסגרו והדוחות שלך יימחקו מהאפליקציה שלך. <b>אי אפשר לשחזר אותם.</b></div>
@@ -238,10 +311,18 @@
       const f = e.target.dataset && e.target.dataset.f;
       if (!f) return;
       if (f === 'password') st.password = e.target.value;
+      else if (f === 'start') st.startDraft = e.target.value;
       else if (st.close) { st.close[f] = e.target.value; if (f === 'counted') draw(); }
     });
     root.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (e.target.dataset && e.target.dataset.submit === 'start') {
+        const addr = (st.startDraft != null ? st.startDraft : startOf()).trim();
+        if (!addr) return g.UI.toast(root, 'כתוב כתובת', 'למשל: ציפורן 4, עפולה');
+        try { await db.updateDriver(st.driverId, { startAddress: addr }); st.settings = false; g.UI.toast(root, 'נקודת המוצא נשמרה', addr); }
+        catch (x) { console.error(x); g.UI.toast(root, 'השמירה נכשלה', 'נסה שוב'); }
+        return draw();
+      }
       if (!st.password) { st.err = 'הזן סיסמה.'; return draw(); }
       st.busy = true; st.err = ''; draw();
       try { await db.signIn(st.password); st.password = ''; }
@@ -261,7 +342,7 @@
     db.onPush((p) => { g.UI.toast(root, p.title, p.body); });
     function subscribe() {
       unsub.forEach((f) => f()); unsub = [];
-      st.me = null; st.orders = []; st.reports = []; st.open = null; st.close = null; st.cash = null; st.settings = false;
+      st.me = null; st.orders = []; st.reports = []; st.routes = {}; st.open = null; st.close = null; st.cash = null; st.settings = false;
       if (!st.user) return;
       unsub.push(db.watchDrivers((d) => { st.drivers = d; draw(); }));
       if (st.driverId) {

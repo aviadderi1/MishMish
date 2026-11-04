@@ -103,3 +103,4 @@ button,input,select{font:inherit}
 .update .btn{background:#B84A12;color:#fff;min-height:48px}
 .update .btn.ghost{background:transparent;color:#123C2F;border:1px solid #123C2F;min-height:48px}
 .call{width:48px;height:48px;border-radius:50%;background:#123C2F;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.rnum{display:inline-flex;width:30px;height:30px;border-radius:50%;background:#F2A33A;color:#1A1206;align-items:center;justify-content:center;font-size:15px;font-weight:700;margin-left:8px}
