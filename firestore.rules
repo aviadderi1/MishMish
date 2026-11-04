@@ -7,6 +7,5 @@ service cloud.firestore {
     match /drivers/{id} { allow read, write: if business(); }
     match /orders/{id} { allow read, write: if business(); }
     match /tokens/{id} { allow read, write: if business(); }
-    match /dispatches/{id} { allow create: if business(); }
   }
 }

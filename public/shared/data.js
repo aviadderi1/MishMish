@@ -78,7 +78,7 @@
       async dispatch(ids, driver) {
         ids.forEach((id) => Object.assign(order(id), { status: 'sent', driverId: driver.id, driverName: driver.name, day: dayKey(), sentAt: Date.now() }));
         const total = ids.reduce((s, id) => s + order(id).amount, 0);
-        store.notify('driver:' + driver.id, `${ids.length} משלוחים חדשים`, `₪${total.toLocaleString('he-IL')} לגבייה`);
+        store.notify('driver:' + driver.id, ids.length === 1 ? 'משלוח חדש' : `${ids.length} משלוחים חדשים`, `₪${total.toLocaleString('he-IL')} לגבייה`);
         store.commit();
       },
       async markPaid(id) {
@@ -131,6 +131,21 @@
       }, (e) => console.error(e)));
       return () => unsubs.forEach((u) => u());
     };
+    // מבקש מהשרת הקטן לשלוח פוש. כישלון כאן לא פוגע בנתונים, שכבר נשמרו.
+    const notify = async (payload) => {
+      try {
+        if (!cfg.pushUrl || !auth.currentUser) return;
+        const id = await auth.currentUser.getIdToken();
+        const r = await fetch(cfg.pushUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${id}` }, body: JSON.stringify(payload) });
+        if (!r.ok) console.error('push', r.status);
+      } catch (e) { console.error('push', e); }
+    };
+    // בלי קליטה Firestore שומר מקומית ומסיים רק כשהרשת חוזרת: לא משאירים את הנהג מחכה
+    const saveThenNotify = (write, payload) => {
+      const done = write.then(() => notify(payload));
+      done.catch((e) => console.error(e));
+      return Promise.race([done, new Promise((r) => setTimeout(r, 1500))]);
+    };
     const swReg = () => navigator.serviceWorker.register('sw.js');
     return {
       demo: false, role, today: dayKey, digits,
@@ -176,11 +191,11 @@
       async dispatch(ids, driver) {
         const batch = fs.batch();
         ids.forEach((id) => batch.update(col('orders').doc(id), { status: 'sent', driverId: driver.id, driverName: driver.name, day: dayKey(), sentAt: now() }));
-        batch.set(col('dispatches').doc(), { driverId: driver.id, orderIds: ids, createdAt: now() });
         await batch.commit();
+        notify({ kind: 'dispatch', driverId: driver.id, orderIds: ids });
       },
-      markPaid: (id) => col('orders').doc(id).update({ status: 'paid', day: dayKey(), doneAt: now() }),
-      markFailed: (id, reason) => col('orders').doc(id).update({ status: 'failed', failReason: reason, day: dayKey(), doneAt: now() }),
+      markPaid: (id) => saveThenNotify(col('orders').doc(id).update({ status: 'paid', day: dayKey(), doneAt: now() }), { kind: 'done', orderId: id }),
+      markFailed: (id, reason) => saveThenNotify(col('orders').doc(id).update({ status: 'failed', failReason: reason, day: dayKey(), doneAt: now() }), { kind: 'done', orderId: id }),
       returnToOrders: (id) => col('orders').doc(id).update({ status: 'new', driverId: null, driverName: null, failReason: null, day: dayKey() }),
       reopenToDriver: (id) => col('orders').doc(id).update({ status: 'sent', failReason: null }),
       pushSupported: () => !!native || 'serviceWorker' in navigator && 'Notification' in g && fb.messaging.isSupported(),
