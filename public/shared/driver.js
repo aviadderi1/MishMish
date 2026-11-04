@@ -99,7 +99,8 @@
     function listView() {
       const pushOff = !db.demo && db.pushSupported() && db.pushState() !== 'granted';
       const today = db.today();
-      const days = [...new Set(st.orders.map((o) => o.day).concat(st.reports.map((r) => r.day)))].sort().reverse();
+      // על המסך: היום, ומשלוחים שעדיין פתוחים מימים קודמים
+      const days = [...new Set(st.orders.filter((o) => o.day === today || o.status === 'sent').map((o) => o.day))].sort().reverse();
       const rank = { sent: 0, paid: 1, failed: 2 };
       const group = (day) => {
         const route = routeOf(day);
@@ -136,7 +137,8 @@
         <button class="btn hdrbtn" style="width:48px;padding:0;display:flex;align-items:center;justify-content:center;border-color:#2E4139" type="button" data-a="settings" aria-label="הגדרות"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"></path></svg></button></div></header>
       <main class="main" style="gap:16px">
         ${pushOff ? '<div class="card pad"><div>הפעל התראות כדי לדעת מיד כשמגיעים משלוחים חדשים.</div><button class="btn small" type="button" data-a="enablePush">הפעלת התראות</button></div>' : ''}
-        ${days.length ? days.map(group).join('') : '<div class="empty">אין לך משלוחים כרגע.<br>כשהמנהל ישלח לך, הם יופיעו כאן.</div>'}
+        ${days.length ? days.map(group).join('') : '<div class="empty">אין לך משלוחים היום.<br>כשהמנהל ישלח לך, הם יופיעו כאן.</div>'}
+        <button class="btn ghost" style="color:#D5DED8;border-color:var(--line)" type="button" data-a="history">דוחות קודמים</button>
       </main>
       ${todayOrders.length && !(todayRep && todayRep.approved) ? `<div class="footer" style="background:transparent"><button class="btn" style="min-height:58px;font-size:18px;font-weight:700" type="button" data-a="closeDay" data-v="${today}">${todayRep ? 'עדכון הסיכום ושליחה מחדש' : 'סיום יום וספירת כסף'}</button></div>` : ''}`;
     }
@@ -151,6 +153,31 @@
           <div class="mut">מוחק מהאפליקציה שלך משלוחים שנסגרו ודוחות. אצל המנהל הם נשארים.</div>
           <button class="btn ghost" style="color:#F2A33A;border-color:#F2A33A" type="button" data-a="clearAsk">מחיקת הנתונים שלי</button></section>
         <button class="link" type="button" data-a="switchDriver">לא ${esc((st.me && st.me.name) || 'אתה')}? החלפת נהג</button>
+      </main>`;
+    }
+
+    function historyView() {
+      const h = st.history;
+      const back = `<button class="btn hdrbtn" style="border-color:#2E4139" type="button" data-a="${h.detail ? 'histDayBack' : 'histClose'}">חזרה</button>`;
+      if (h.loading) return `<header class="hdr"><div class="row"><h1>דוחות קודמים</h1>${back}</div></header><div class="empty" style="margin:auto">טוען...</div>`;
+      if (h.error) return `<header class="hdr"><div class="row"><h1>דוחות קודמים</h1>${back}</div></header><main class="main"><div class="err">הטעינה נכשלה. בדוק חיבור ונסה שוב.</div></main>`;
+      if (h.detail) {
+        const d = h.sum.days.find((x) => x.day === h.detail);
+        return `<header class="hdr"><div class="row"><h1 style="font-size:22px">${g.UI.dayLabel(d.day)}</h1>${back}</div></header>
+        <main class="main">
+          <section class="card pad"><div class="row"><span>נגבה</span><b>${money(d.collected)}</b></div><div class="row"><span>נספר</span><b>${d.hasReport ? money(d.counted) : 'לא נשלח סיכום'}</b></div><div class="row"><span>מחיר משלוחים</span><b>${money(d.fees)}</b></div>
+            <div class="row"><span>תשלום מנהל</span><b style="color:#5BD29A">${d.hasPayment ? money(d.payment) : 'עוד לא התקבל'}</b></div></section>
+          ${d.orders.map((o) => `<div class="stop" style="cursor:default"><span class="row"><span style="font-weight:600">${esc(o.customer)}</span><b>${money(o.amount)}</b></span><span class="row"><span class="mut">${esc(o.city)} · ${esc(prod(o))}</span><span style="font-size:13px;color:${o.status === 'paid' ? '#5BD29A' : '#F2A33A'}">${o.status === 'paid' ? 'שולם' : 'לא נמסר'}</span></span>${o.fee ? `<span class="mut">משלוח: ${money(o.fee)}</span>` : ''}</div>`).join('')}
+        </main>`;
+      }
+      const tab = (k, t) => `<button type="button" class="seg ${h.mode === k ? 'on' : ''}" data-a="histMode" data-v="${k}">${t}</button>`;
+      const rowDay = (d) => `<button type="button" class="stop" data-a="histDay" data-v="${d.day}"><span style="font-weight:700;color:#F2A33A">${g.UI.dayLabel(d.day)}</span><span style="font-size:14px;color:#D5DED8">${d.delivered} משלוחים · נגבו ${money(d.collected)}${d.hasReport ? ` · נספרו ${money(d.counted)}` : ''} · משלוחים ${money(d.fees)}</span><span style="font-size:14px;color:#5BD29A">${d.hasPayment ? `תשלום מנהל ${money(d.payment)}` : 'עוד לא התקבל תשלום'}</span></button>`;
+      const shown = h.month ? h.sum.days.filter((d) => d.day.startsWith(h.month)) : h.sum.days;
+      return `<header class="hdr"><div class="row"><h1>דוחות קודמים</h1>${back}</div></header>
+      <main class="main">
+        <div class="segs">${tab('days', 'לפי ימים')}${tab('months', 'לפי חודשים')}</div>
+        ${h.mode === 'days' ? (h.month ? `<div class="row"><b>${g.UI.monthLabel(h.month)}</b><button class="link" type="button" data-a="histAll">כל הימים</button></div>` : '') + (shown.length ? shown.map(rowDay).join('') : '<div class="empty">אין דוחות קודמים.</div>')
+          : (h.sum.months.length ? h.sum.months.map((m) => `<button type="button" class="stop" data-a="histMonth" data-v="${m.month}"><span class="row"><span style="font-weight:700;color:#F2A33A">${g.UI.monthLabel(m.month)}</span><b>${money(m.collected)}</b></span><span style="font-size:14px;color:#D5DED8">${m.days.length} ימים · ${m.delivered} משלוחים · נספרו ${money(m.counted)} · משלוחים ${money(m.fees)}</span><span style="font-size:14px;color:#5BD29A">תשלום מנהל ${money(m.payment)}</span></button>`).join('') : '<div class="empty">אין דוחות קודמים.</div>')}
       </main>`;
     }
 
@@ -222,7 +249,7 @@
     function draw() {
       if (st.user === undefined) return;
       const o = st.open && st.orders.find((x) => x.id === st.open && x.status === 'sent');
-      const v = !st.user ? loginView() : !st.driverId ? pickView() : st.settings ? settingsView() : st.cash ? cashView() : st.close ? closeView() : o ? detailView(o) : listView();
+      const v = !st.user ? loginView() : !st.driverId ? pickView() : st.history ? historyView() : st.settings ? settingsView() : st.cash ? cashView() : st.close ? closeView() : o ? detailView(o) : listView();
       g.UI.render(root, (db.demo ? '<div class="demo">מצב הדגמה</div>' : '') + v);
     }
 
@@ -266,6 +293,22 @@
       },
       settings() { st.settings = true; st.startDraft = null; draw(); },
       plan(day) { planRoute(day); },
+      async history() {
+        st.history = { mode: 'days', loading: true, month: null, detail: null }; draw();
+        try {
+          const data = await db.getHistory(st.driverId);
+          if (!st.history) return;
+          st.history.sum = g.UI.summarize(data, 'hiddenDriver');
+          st.history.loading = false;
+        } catch (e) { console.error(e); if (st.history) { st.history.loading = false; st.history.error = true; } }
+        draw();
+      },
+      histClose() { st.history = null; draw(); },
+      histMode(v) { st.history.mode = v; st.history.month = null; draw(); },
+      histMonth(v) { st.history.mode = 'days'; st.history.month = v; draw(); },
+      histAll() { st.history.month = null; draw(); },
+      histDay(v) { st.history.detail = v; draw(); },
+      histDayBack() { st.history.detail = null; draw(); },
       settingsBack() { st.settings = false; draw(); },
       clearAsk() {
         g.UI.sheet(root, `<h2 style="color:#F2A33A">למחוק את הנתונים שלך?</h2><div style="line-height:1.5">משלוחים שנסגרו והדוחות שלך יימחקו מהאפליקציה שלך. <b>אי אפשר לשחזר אותם.</b></div>
@@ -351,6 +394,7 @@
     g.handleBack = () => {
       const sc = root.querySelector(':scope > .scrim');
       if (sc) { sc.remove(); return true; }
+      if (st.history) { if (st.history.detail) actions.histDayBack(); else actions.histClose(); return true; }
       const cel = root.querySelector(':scope > .celebrate');
       if (cel) { cel.remove(); return true; }
       if (st.settings) { actions.settingsBack(); return true; }
@@ -362,7 +406,7 @@
     db.onPush((p) => { g.UI.toast(root, p.title, p.body); });
     function subscribe() {
       unsub.forEach((f) => f()); unsub = [];
-      st.me = null; st.orders = []; st.reports = []; st.routes = {}; st.open = null; st.close = null; st.cash = null; st.settings = false;
+      st.me = null; st.orders = []; st.reports = []; st.routes = {}; st.history = null; st.open = null; st.close = null; st.cash = null; st.settings = false;
       if (!st.user) return;
       unsub.push(db.watchDrivers((d) => { st.drivers = d; draw(); }));
       if (st.driverId) {

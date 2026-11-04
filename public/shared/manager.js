@@ -35,7 +35,7 @@
     /* ---------- מסכים ---------- */
     const hdr = (title, sub, extra = '') => `<header class="hdr"><div class="row"><h1>${title}</h1>${extra}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</header>`;
     const nav = () => `<nav class="nav" aria-label="ניווט ראשי">${[['new', 'חדשה'], ['orders', 'הזמנות'], ['track', 'מעקב'], ['summary', 'סיכום'], ['drivers', 'נהגים']]
-      .map(([k, t]) => `<button type="button" data-a="tab" data-v="${k}" class="${st.tab === k && (!st.sub || st.sub === 'reports') ? 'on' : ''}">${t}</button>`).join('')}</nav>`;
+      .map(([k, t]) => `<button type="button" data-a="tab" data-v="${k}" class="${st.tab === k && (!st.sub || st.sub === 'reports' || st.sub === 'history') ? 'on' : ''}">${t}</button>`).join('')}</nav>`;
     const err = () => (st.err ? `<div class="err" role="alert">${esc(st.err)}</div>` : '');
     const field = (id, label, form, key, attrs = '') => `<div class="field"><label for="${id}">${label}</label><input id="${id}" data-f="${form}.${key}" value="${esc(st[form][key])}" ${attrs}></div>`;
     const areaSelect = (id, form, withNew) => `<div class="field"><label for="${id}">אזור</label>
@@ -71,7 +71,7 @@
 
     function newView() {
       const editing = !!st.order.id;
-      return `${hdr(editing ? 'עריכת הזמנה' : 'הזמנה חדשה', new Date().toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' }), '<button class="btn hdrbtn" style="width:48px;padding:0;display:flex;align-items:center;justify-content:center" type="button" data-a="settings" aria-label="הגדרות"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"></path></svg></button>')}
+      return `${hdr(editing ? 'עריכת הזמנה' : 'הזמנה חדשה', new Date().toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' }), '<div style="display:flex;gap:6px"><button class="btn hdrbtn" style="width:48px;padding:0;display:flex;align-items:center;justify-content:center" type="button" data-a="search" aria-label="חיפוש"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg></button><button class="btn hdrbtn" style="width:48px;padding:0;display:flex;align-items:center;justify-content:center" type="button" data-a="settings" aria-label="הגדרות"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"></path></svg></button></div>')}
       <form class="main" data-submit="order">
         ${err()}
         <div class="sugwrap"><div class="field"><label for="cust">שם הלקוח</label><div style="display:flex;gap:8px"><input id="cust" style="flex:1;min-width:0" data-f="order.customer" value="${esc(st.order.customer)}" autocomplete="off"><button type="button" class="btn ghost" style="width:auto;flex-shrink:0;min-height:48px;padding:0 10px;font-size:14px;background:#E1ECF7;color:#173F70" data-a="customersFromOrder">לקוחות קבועים</button></div></div><div class="sug" id="sug-cust"></div></div>
@@ -195,7 +195,7 @@
           <div style="display:flex;gap:6px"><button class="btn hdrbtn" type="button" data-a="dayShift" data-v="-1" aria-label="יום קודם">הקודם</button>${isToday ? '' : '<button class="btn hdrbtn" type="button" data-a="dayShift" data-v="1" aria-label="יום הבא">הבא</button>'}</div></div>
         <div class="hero">${money(got)}</div><div class="sub">נגבו במזומן מתוך ${money(all)}</div></header>
       <main class="main">
-        <button class="btn" type="button" data-a="reports">דוחות נהגים (${st.reports.filter((r) => r.day === st.day).length})</button>
+        <div class="two"><button class="btn" type="button" data-a="reports">דוחות נהגים (${st.reports.filter((r) => r.day === st.day).length})</button><button class="btn ghost" type="button" data-a="history">דוחות קודמים</button></div>
         <div class="two">
           <div class="card pad" style="gap:2px"><b style="font-size:23px">${paid.length} מתוך ${os.length}</b><span class="mut">משלוחים נמסרו</span></div>
           <div class="card pad" style="gap:2px;background:#F9E7D8;color:#6F2D08;border:0"><b style="font-size:23px">${money(all - got)}</b><span style="font-size:14px">לא נגבו</span></div>
@@ -222,7 +222,7 @@
         const d = r.counted - r.collected;
         return d === 0 ? '<span class="tag">תואם</span>' : `<span class="tag warn">${d < 0 ? 'חסרים' : 'עודף'} ${money(Math.abs(d))}</span>`;
       };
-      return `${hdr('דוחות נהגים', label, '<button class="btn hdrbtn" type="button" data-a="back">חזרה</button>')}
+      return `${hdr('דוחות נהגים', label, `<button class="btn hdrbtn" type="button" data-a="${st.fromHist ? 'histView' : 'back'}">חזרה</button>`)}
       <main class="main">${err()}
         ${reps.map((r) => `<section class="card pad">
           <div class="row"><h2 style="font-size:17px">${esc(r.driverName)}</h2>${tag(r)}</div>
@@ -257,6 +257,60 @@
         ${areaSelect('ccarea', 'cust', false)}
         <button class="btn" type="submit" ${st.busy ? 'disabled' : ''}>שמירה</button><button class="btn ghost" type="button" data-a="custList">ביטול</button>
       </form>`;
+    }
+
+    function historyView() {
+      const h = st.hist;
+      const back = '<button class="btn hdrbtn" type="button" data-a="back">חזרה</button>';
+      if (!h || h.loading) return `${hdr('דוחות קודמים', '', back)}<div class="empty" style="margin:auto">טוען...</div>`;
+      if (h.error) return `${hdr('דוחות קודמים', '', back)}<main class="main"><div class="err">הטעינה נכשלה. בדוק חיבור ונסה שוב.</div></main>${nav()}`;
+      const sum = g.UI.summarize(h.data, 'hiddenManager', h.driver);
+      const tab = (k, t) => `<button type="button" class="seg ${h.mode === k ? 'on' : ''}" data-a="histMode" data-v="${k}">${t}</button>`;
+      const shown = h.month ? sum.days.filter((d) => d.day.startsWith(h.month)) : sum.days;
+      const dName = (id) => (st.drivers.find((x) => x.id === id) || {}).name;
+      const driversIn = (m) => [...new Set(m.days.flatMap((d) => d.orders.map((o) => o.driverId)))];
+      return `${hdr('דוחות קודמים', '', back)}
+      <main class="main">${err()}
+        <div class="segs">${tab('days', 'לפי ימים')}${tab('months', 'לפי חודשים')}</div>
+        <div class="field"><label for="hdriver">נהג</label><select id="hdriver" data-f="hist.driver"><option value="">כל הנהגים</option>${st.drivers.map((d) => `<option value="${esc(d.id)}" ${h.driver === d.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></div>
+        ${h.mode === 'days'
+          ? (h.month ? `<div class="row"><b>${g.UI.monthLabel(h.month)}</b><button class="link" type="button" data-a="histAll">כל הימים</button></div>` : '') +
+            (shown.length ? shown.map((d) => `<button type="button" class="card tap pad" style="box-sizing:border-box;gap:3px" data-a="histDay" data-v="${d.day}"><span class="row"><b>${g.UI.dayLabel(d.day)}</b><b>${money(d.collected)}</b></span><span class="mut" style="color:#3F4B45">${d.delivered} משלוחים · ${d.reports.length} דוחות${d.hasReport ? ` · נספרו ${money(d.counted)}` : ''}${d.hasPayment ? ` · שולם לנהגים ${money(d.payment)}` : ''}</span></button>`).join('') : '<div class="empty">אין דוחות קודמים.</div>')
+          : (sum.months.length ? sum.months.map((m) => `<section class="card pad"><div class="row"><h2 style="font-size:17px">${g.UI.monthLabel(m.month)}</h2><b style="font-size:18px">${money(m.collected)}</b></div>
+              <div class="mut" style="color:#3F4B45">${m.days.length} ימים · ${m.delivered} משלוחים · נספרו ${money(m.counted)} · שולם לנהגים ${money(m.payment)}</div>
+              <button class="btn ghost" type="button" data-a="histMonth" data-v="${m.month}">פירוט לפי ימים</button>
+              ${(h.driver ? [h.driver] : driversIn(m)).map((id) => `<button class="btn ghost" type="button" data-a="monthPdf" data-v="${m.month}|${esc(id)}">דוח PDF חודשי · ${esc(dName(id) || (m.days.flatMap((d) => d.orders).find((o) => o.driverId === id) || {}).driverName || '')}</button>`).join('')}
+            </section>`).join('') : '<div class="empty">אין דוחות קודמים.</div>')}
+      </main>${nav()}`;
+    }
+
+    function searchView() {
+      const h = st.hist, qRaw = (st.searchQ || '').trim(), q = qRaw.toLowerCase();
+      const has = (...f) => f.some((x) => x != null && String(x).toLowerCase().includes(q));
+      const dateText = (day) => { const d = new Date(day + 'T12:00'); return [day, g.UI.dayLabel(day), `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`, `${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear()}`].join(' '); };
+      const row = (a, v, top, bottom) => `<button type="button" class="tap sres" data-a="${a}" data-v="${esc(v)}"><span style="display:block;font-weight:500">${esc(top)}</span><span class="mut" style="display:block;font-size:13px">${esc(bottom)}</span></button>`;
+      const group = (title, rows) => (rows.length ? `<section class="card"><div class="area-h"><h2 class="grow" style="font-size:15px;padding:6px 0">${title} · ${rows.length}</h2></div>${rows.slice(0, 30).join('')}</section>` : '');
+      let body = '';
+      if (!h || h.loading) body = '<div class="empty">טוען...</div>';
+      else if (h.error) body = '<div class="err">הטעינה נכשלה. בדוק חיבור ונסה שוב.</div>';
+      else if (qRaw.length < 2) body = '<div class="empty">כתוב לפחות שתי אותיות: לקוח, טלפון, עיר, נהג, מוצר, סכום או תאריך.</div>';
+      else {
+        const label = { new: 'ממתינה', sent: 'בדרך', paid: 'שולם', failed: 'לא נמסר' };
+        const customers = st.customers.map((c, i) => ({ c, i })).filter(({ c }) => has(c.name, c.phone, c.city, c.address));
+        const drivers = st.drivers.filter((d) => has(d.name, d.phone));
+        const orders = h.data.orders.filter((o) => !o.hiddenManager && has(o.customer, o.phone, o.city, o.address, o.product, o.amount, o.driverName, dateText(o.day))).sort((a, b) => (a.day < b.day ? 1 : -1));
+        const reports = h.data.reports.filter((r) => !r.hiddenManager && (has(r.driverName, r.driverPhone, r.collected, r.counted, r.note, dateText(r.day)) || (r.rows || []).some((x) => has(x.customer, x.city, x.product)))).sort((a, b) => (a.day < b.day ? 1 : -1));
+        const parts = [
+          group('לקוחות קבועים', customers.map(({ c, i }) => row('custMenu', i, c.name, [[c.address, c.city].filter(Boolean).join(', '), c.phone].filter(Boolean).join(' · ')))),
+          group('נהגים', drivers.map((d) => row('editDriver', d.id, d.name, `${areaName(d.areaId, '')} · ${d.phone}`))),
+          group('הזמנות', orders.map((o) => row('searchOrder', o.id, `${o.customer} · ${money(o.amount)} · ${label[o.status] || ''}`, `${g.UI.dayLabel(o.day)} · ${o.city}${o.driverName ? ' · ' + o.driverName : ''}`))),
+          group('דוחות', reports.map((r) => row('histDay', r.day, `${r.driverName} · ${g.UI.dayLabel(r.day)}`, `נגבו ${money(r.collected)} · נספרו ${money(r.counted)}`)))
+        ].join('');
+        body = parts || '<div class="empty">לא נמצאו תוצאות.</div>';
+      }
+      return `<header class="hdr"><div class="row"><h1>חיפוש</h1><button class="btn hdrbtn" type="button" data-a="back">חזרה</button></div>
+        <input class="inp" id="searchq" data-f="root.searchQ" value="${esc(st.searchQ || '')}" placeholder="לקוח, טלפון, עיר, נהג, מוצר, תאריך" aria-label="חיפוש" autocomplete="off"></header>
+      <main class="main">${body}</main>`;
     }
 
     function settingsView() {
@@ -346,6 +400,8 @@
       else if (st.sub === 'areas') v = areasView();
       else if (st.sub === 'reports') v = reportsView();
       else if (st.sub === 'settings') v = settingsView();
+      else if (st.sub === 'history') v = historyView();
+      else if (st.sub === 'search') v = searchView();
       else if (st.sub === 'customers') v = customersView();
       else if (st.sub === 'custForm') v = custForm();
       else v = { new: newView, orders: ordersView, track: trackView, summary: summaryView, drivers: driversView }[st.tab]();
@@ -379,6 +435,16 @@
       const data = { customer: o.customer.trim(), phone: o.phone.trim(), city: o.city.trim(), address: o.address.trim(), areaId: o.areaId, areaName: areaName(o.areaId), product: o.product.trim(), qty: String(o.qty || '').trim(), amount };
       if (o.id) data.id = o.id;
       return data;
+    }
+
+    async function loadHist(init) {
+      st.err = '';
+      st.hist = { ...init, loading: true }; draw();
+      try {
+        const data = await db.getHistory();
+        if (st.hist) { st.hist.data = data; st.hist.loading = false; }
+      } catch (e) { console.error(e); if (st.hist) { st.hist.loading = false; st.hist.error = true; } }
+      draw();
     }
 
     const submits = {
@@ -572,6 +638,30 @@
         if (el) { el.value = st.order.address; el.focus(); }
         fillSug('sug-addr', '');
       },
+      history() { st.fromHist = false; st.sub = 'history'; loadHist({ mode: 'days', driver: '', month: null }); },
+      histView() { go(() => { st.sub = 'history'; st.fromHist = false; }); },
+      histMode(v) { st.hist.mode = v; st.hist.month = null; draw(); },
+      histMonth(v) { st.hist.mode = 'days'; st.hist.month = v; draw(); },
+      histAll() { st.hist.month = null; draw(); },
+      histDay(v) {
+        st.day = v; st.fromHist = true; st.sub = 'reports'; st.showDetail = false;
+        subOrders(); draw();
+      },
+      monthPdf(v) {
+        const [month, driverId] = v.split('|');
+        const m = g.UI.summarize(st.hist.data, 'hiddenManager', driverId).months.find((x) => x.month === month);
+        const d = st.drivers.find((x) => x.id === driverId);
+        const fallback = m.days.flatMap((x) => x.orders)[0] || {};
+        run(() => g.Report.openMonth({ ...m, driverName: d ? d.name : fallback.driverName, driverPhone: d ? d.phone : '' }));
+      },
+      search() { st.searchQ = ''; st.sub = 'search'; loadHist({ mode: 'days', driver: '', month: null }); },
+      searchOrder(v) {
+        const o = st.hist.data.orders.find((x) => x.id === v);
+        if (!o) return;
+        if (o.status === 'new' || o.status === 'sent') {
+          go(() => { st.order = { id: o.id, customer: o.customer, phone: o.phone, city: o.city, address: o.address || '', areaId: o.areaId, product: o.product, qty: o.qty || '', status: o.status, amount: String(o.amount) }; st.tab = 'new'; st.sub = null; });
+        } else actions.histDay(o.day);
+      },
       settings() { go(() => { st.sub = 'settings'; }); },
       removeManager(i) {
         const m = st.managers[Number(i)];
@@ -684,7 +774,7 @@
       const [form, key] = f.split('.');
       if (e.target.value === '__new') { e.target.value = ''; return go(() => { st.sub = 'areas'; }); }
       if (form === 'root') st[key] = e.target.value; else st[form][key] = e.target.value;
-      if (key === 'custSearch') draw();
+      if (key === 'custSearch' || key === 'searchQ' || form === 'hist') draw();
       if (form === 'order') {
         if (key === 'customer') suggestCustomers('customer', 'sug-cust');
         if (key === 'phone') suggestCustomers('phone', 'sug-phone');

@@ -116,3 +116,10 @@ button,input,select{font:inherit}
 .sugwrap{position:relative;min-width:0}
 .sug{display:none;position:absolute;top:100%;right:0;left:0;z-index:6;margin-top:2px;background:#fff;border:1px solid #B9C2BB;border-radius:10px;box-shadow:0 8px 20px rgba(10,30,22,.25);overflow:hidden;max-height:230px;overflow-y:auto;min-width:170px}
 .sug button{display:block;width:100%;min-height:44px;border:0;border-bottom:1px solid #E8EBE6;background:#fff;color:#15231D;text-align:right;padding:6px 12px;font-size:15px;cursor:pointer}
+.segs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));background:#E3E7E1;border-radius:10px;padding:4px;flex-shrink:0}
+.drv .segs{background:var(--card)}
+.seg{height:44px;border:0;border-radius:8px;background:transparent;color:var(--mut);font-size:15px;font-weight:500;cursor:pointer}
+.seg.on{background:#fff;color:#123C2F;font-weight:700}
+.drv .seg.on{background:#F2A33A;color:#1A1206}
+.sres{padding:9px 12px;min-height:56px;border-top:1px solid #E8EBE6;box-sizing:border-box}
+.hdr .inp{margin-top:8px;border:0}

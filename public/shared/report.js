@@ -120,9 +120,57 @@
     return makePdf(jpegs);
   }
 
+  // דוח חודשי לנהג: שורה לכל יום וסיכום
+  const MCOLS = [['תאריך', 270], ['משלוחים', 120], ['נגבה', 150], ['נספר', 150], ['הפרש', 120], ['מחיר משלוח', 130], ['תשלום', 120]];
+  function drawMonthPage(m, rows, pageNo, pages, isLast) {
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const x = c.getContext('2d');
+    x.fillStyle = '#FFFFFF'; x.fillRect(0, 0, W, H);
+    x.direction = 'rtl'; x.textBaseline = 'middle';
+    const text = (s, px, py, font, color = '#15231D', align = 'right') => { x.font = font + ' Rubik, sans-serif'; x.fillStyle = color; x.textAlign = align; x.fillText(s, px, py); };
+    text('דוח חודשי', W - M, 120, '700 56px', '#123C2F');
+    text(g.UI.monthLabel(m.month), W - M, 180, '400 30px', '#56635C');
+    text(m.driverName || '', M, 120, '600 38px', '#15231D', 'left');
+    x.direction = 'ltr'; text(m.driverPhone || '', M, 178, '400 27px', '#56635C', 'left'); x.direction = 'rtl';
+    x.fillStyle = '#123C2F'; x.fillRect(M, 220, W - 2 * M, 6);
+    let y = 260; const rowH = 54;
+    const row = (cells, font, color, bg) => {
+      if (bg) { x.fillStyle = bg; x.fillRect(M, y, W - 2 * M, rowH); }
+      let rx = W - M - 12;
+      cells.forEach((cell, i) => { text(cell, rx, y + rowH / 2, font, color); rx -= MCOLS[i][1]; });
+      y += rowH;
+    };
+    row(MCOLS.map((c0) => c0[0]), '600 24px', '#FFFFFF', '#123C2F');
+    rows.forEach((d) => {
+      const diff = d.hasReport ? d.counted - d.collected : null;
+      row([new Date(d.day + 'T12:00').toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric', month: 'numeric' }), String(d.delivered), money(d.collected), d.hasReport ? money(d.counted) : '–', diff == null ? '–' : (diff === 0 ? '0' : (diff < 0 ? '-' : '+') + money(Math.abs(diff))), money(d.fees), d.hasPayment ? money(d.payment) : '–'], '400 25px', '#15231D');
+      x.fillStyle = '#D5DAD4'; x.fillRect(M, y - 1, W - 2 * M, 2);
+    });
+    if (isLast) {
+      y += 24;
+      const sum = (k) => m.days.reduce((s, d) => s + d[k], 0);
+      row(['סך הכול', String(sum('delivered')), money(sum('collected')), money(sum('counted')), '', money(sum('fees')), money(sum('payment'))], '700 25px', '#15231D', '#E1ECF7');
+    }
+    x.fillStyle = '#D5DAD4'; x.fillRect(M, H - 100, W - 2 * M, 2);
+    text(`עמוד ${pageNo} מתוך ${pages}`, M, H - 70, '400 23px', '#56635C', 'left');
+    return new Promise((res) => c.toBlob((b) => b.arrayBuffer().then((a) => res(new Uint8Array(a))), 'image/jpeg', 0.92));
+  }
+  async function buildMonthPdf(m) {
+    if (document.fonts && document.fonts.load) await Promise.all(['400', '600', '700'].map((w) => document.fonts.load(`${w} 20px Rubik`, 'אב').catch(() => {})));
+    const rows = [...m.days].sort((a, b) => (a.day < b.day ? -1 : 1));
+    const chunks = [];
+    for (let i = 0; i < rows.length; i += 24) chunks.push(rows.slice(i, i + 24));
+    if (!chunks.length) chunks.push([]);
+    const jpegs = [];
+    for (let p = 0; p < chunks.length; p++) jpegs.push(await drawMonthPage(m, chunks[p], p + 1, chunks.length, p === chunks.length - 1));
+    return makePdf(jpegs);
+  }
+  const openMonth = async (m) => deliver(await buildMonthPdf(m), `דוח-חודשי-${m.driverName || 'נהג'}-${m.month}.pdf`, false);
+
   async function open(r, share) {
-    const bytes = await buildPdf(r);
-    const name = `דוח-${r.driverName || 'נהג'}-${r.day}.pdf`;
+    return deliver(await buildPdf(r), `דוח-${r.driverName || 'נהג'}-${r.day}.pdf`, share);
+  }
+  async function deliver(bytes, name, share) {
     if (g.AndroidApp) {
       let bin = ''; for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
       g.AndroidApp.openFile(name, btoa(bin), 'application/pdf', !!share);
@@ -132,5 +180,5 @@
     const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
   }
-  g.Report = { buildPdf, open };
+  g.Report = { buildPdf, open, buildMonthPdf, openMonth };
 })(self);

@@ -88,6 +88,10 @@
         store.commit();
       },
       async setFee(id, fee) { order(id).fee = fee; store.commit(); },
+      async getHistory(driverId) {
+        const mine = (x) => !driverId || x.driverId === driverId;
+        return { orders: store.s.orders.filter(mine).map((o) => ({ ...o })), reports: store.s.reports.filter(mine).map((r) => ({ ...r })) };
+      },
       watchCustomers: (cb) => watch(() => store.s.customers, cb),
       async saveCustomers(list) { store.s.customers = list; store.commit(); },
       watchManagers: (cb) => watch(() => store.s.managers, cb),
@@ -241,6 +245,11 @@
         w.catch((e) => console.error(e));
         return Promise.race([w, new Promise((r) => setTimeout(r, 1500))]);
       },
+      async getHistory(driverId) {
+        const q = (name) => (driverId ? col(name).where('driverId', '==', driverId) : col(name)).get();
+        const [o, r] = await Promise.all([q('orders'), q('reports')]);
+        return { orders: docs(o), reports: docs(r).map(withMs) };
+      },
       watchCustomers: (cb) => col('tokens').doc('_customers').onSnapshot((d) => cb(d.exists ? d.data().list || [] : []), (e) => console.error(e)),
       saveCustomers: (list) => col('tokens').doc('_customers').set({ list }),
       // רשימת המנהלים נשמרת כמסמך באוסף tokens, שחוקי ההרשאות כבר מאפשרים
@@ -340,6 +349,29 @@
   g.UI = {
     esc,
     money: (n) => '₪' + Number(n || 0).toLocaleString('he-IL'),
+    // מסכם הזמנות ודוחות לפי ימים וחודשים. side: 'hiddenManager' או 'hiddenDriver'
+    summarize(hist, side, driverId) {
+      const orders = hist.orders.filter((o) => !o[side] && (o.status === 'paid' || o.status === 'failed') && (!driverId || o.driverId === driverId));
+      const reports = hist.reports.filter((r) => !r[side] && (!driverId || r.driverId === driverId));
+      const byDay = new Map();
+      const dayOf = (day) => { if (!byDay.has(day)) byDay.set(day, { day, orders: [], reports: [] }); return byDay.get(day); };
+      orders.forEach((o) => dayOf(o.day).orders.push(o));
+      reports.forEach((r) => dayOf(r.day).reports.push(r));
+      const days = [...byDay.values()].sort((a, b) => (a.day < b.day ? 1 : -1)).map((d) => {
+        const paid = d.orders.filter((o) => o.status === 'paid');
+        return { ...d, delivered: paid.length, collected: paid.reduce((s, o) => s + o.amount, 0), fees: d.orders.reduce((s, o) => s + (o.fee || 0), 0),
+          counted: d.reports.reduce((s, r) => s + (r.counted || 0), 0), hasReport: d.reports.length > 0, payment: d.reports.reduce((s, r) => s + (r.payment || 0), 0), hasPayment: d.reports.some((r) => r.payment != null) };
+      });
+      const byMonth = new Map();
+      days.forEach((d) => { const k = d.day.slice(0, 7); if (!byMonth.has(k)) byMonth.set(k, { month: k, days: [] }); byMonth.get(k).days.push(d); });
+      const months = [...byMonth.values()].map((m) => {
+        const sum = (k) => m.days.reduce((s, d) => s + d[k], 0);
+        return { ...m, delivered: sum('delivered'), collected: sum('collected'), counted: sum('counted'), fees: sum('fees'), payment: sum('payment') };
+      });
+      return { days, months };
+    },
+    dayLabel: (day) => new Date(day + 'T12:00').toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
+    monthLabel: (m) => new Date(m + '-15T12:00').toLocaleDateString('he-IL', { month: 'long', year: 'numeric' }),
     prod: (o) => o.product + (o.qty && Number(o.qty) > 0 ? ` × ${o.qty}` : ''),
     // רשימת הרחובות של עיר: מאגר הממשלה, ואם הוא לא זמין OpenStreetMap
     async streetsOf(city) {
