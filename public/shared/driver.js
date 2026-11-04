@@ -162,14 +162,14 @@
           <button class="btn done" data-s="yes" style="min-height:60px;font-size:20px">כן, נמסר ושולם</button><button class="btn ghost" data-s="close">עוד לא</button>`, async () => {
           st.busy = true; draw();
           try { await db.markPaid(o.id); st.open = null; g.UI.toast(root, 'נשמר', `${o.customer} · ${money(o.amount)}`); }
-          catch (e) { console.error(e); g.UI.toast(root, 'השמירה נכשלה', 'נסה שוב'); }
+          catch (e) { console.error(e); g.UI.toast(root, 'השמירה נכשלה', `נסה שוב (${(e && (e.code || e.message)) || 'לא ידוע'})`); }
           st.busy = false; draw();
         });
       },
       fail() {
         const o = st.orders.find((x) => x.id === st.open);
         g.UI.sheet(root, `<h2>למה לא נמסר?</h2>${REASONS.map((r, i) => `<button class="btn ghost" data-s="${i}">${r}</button>`).join('')}<button class="link" data-s="close">ביטול</button>`, async (i) => {
-          try { await db.markFailed(o.id, REASONS[i]); st.open = null; } catch (e) { console.error(e); g.UI.toast(root, 'השמירה נכשלה', 'נסה שוב'); }
+          try { await db.markFailed(o.id, REASONS[i]); st.open = null; } catch (e) { console.error(e); g.UI.toast(root, 'השמירה נכשלה', `נסה שוב (${(e && (e.code || e.message)) || 'לא ידוע'})`); }
           draw();
         });
       },
@@ -198,7 +198,7 @@
           <div class="field"><label for="feeval">סכום (₪)</label><input id="feeval" class="big" style="border-color:#F2A33A" inputmode="decimal" value="${o.fee ? esc(o.fee) : ''}" autocomplete="off"></div>
           <button class="btn done" style="min-height:56px;font-size:18px" data-s="save">שמירה</button><button class="btn ghost" data-s="close">ביטול</button>`, async (_, val) => {
           const fee = Number(String(val).replace(/[^\d.]/g, '')) || 0;
-          try { await db.setFee(v, fee); } catch (e) { console.error(e); g.UI.toast(root, 'השמירה נכשלה', 'נסה שוב'); }
+          try { await db.setFee(v, fee); } catch (e) { console.error(e); g.UI.toast(root, 'השמירה נכשלה', `נסה שוב (${(e && (e.code || e.message)) || 'לא ידוע'})`); }
         });
         sh.querySelector('#feeval').focus();
       },
