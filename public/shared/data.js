@@ -262,6 +262,22 @@
         snaps[1].docs.forEach((d) => { if (d.data().hiddenManager) ops.push((b) => b.delete(d.ref)); else ops.push((b) => b.update(d.ref, { hiddenDriver: true })); });
         await runBatches(ops);
       },
+      async saveOrder(o) {
+        const { id, ...f } = o;
+        if (id) { await col('orders').doc(id).update(f); return id; }
+        return (await col('orders').add({ ...f, status: 'new', day: dayKey(), driverId: null, createdAt: now() })).id;
+      },
+      deleteOrder: (id) => col('orders').doc(id).delete(),
+      async dispatch(ids, driver) {
+        const batch = fs.batch();
+        ids.forEach((id) => batch.update(col('orders').doc(id), { status: 'sent', driverId: driver.id, driverName: driver.name, day: dayKey(), sentAt: now() }));
+        await batch.commit();
+        notify({ kind: 'dispatch', driverId: driver.id, orderIds: ids });
+      },
+      markPaid: (id) => saveThenNotify(col('orders').doc(id).update({ status: 'paid', day: dayKey(), doneAt: now() }), { kind: 'done', orderId: id }),
+      markFailed: (id, reason) => saveThenNotify(col('orders').doc(id).update({ status: 'failed', failReason: reason, day: dayKey(), doneAt: now() }), { kind: 'done', orderId: id }),
+      returnToOrders: (id) => col('orders').doc(id).update({ status: 'new', driverId: null, driverName: null, failReason: null, hiddenDriver: false, day: dayKey() }),
+      reopenToDriver: (id) => col('orders').doc(id).update({ status: 'sent', failReason: null, hiddenDriver: false }),
       pushSupported: () => !!native || 'serviceWorker' in navigator && 'Notification' in g && fb.messaging.isSupported(),
       pushState: () => (native ? native.pushState() : ('Notification' in g ? Notification.permission : 'denied')),
       async enablePush() {
