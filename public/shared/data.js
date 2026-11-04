@@ -8,14 +8,14 @@
   const by = (k) => (a, b) => String(a[k] || '').localeCompare(String(b[k] || ''), 'he');
 
   /* ---------- מצב הדגמה ---------- */
-  const KEY = 'mishloach-demo-v4';
+  const KEY = 'mishloach-demo-v5';
   function seed() {
     const a = [['a1', 'צפון'], ['a2', 'מרכז'], ['a3', 'דרום']].map(([id, name]) => ({ id, name }));
     const dr = [['d1', 'משה', '050-000-0201', 'a1'], ['d2', 'עמית', '050-000-0202', 'a2'], ['d3', 'סאמר', '050-000-0203', 'a3']]
       .map(([id, name, phone, areaId]) => ({ id, name, phone, areaId }));
     const o = [['נועה לוי', '052-000-0101', 'חיפה', 'הנשיא 12', 'a1', 'מארז פרימיום × 2', 480], ['יוסי כהן', '052-000-0102', 'קריית אתא', 'הגפן 7', 'a1', 'מארז בסיסי × 1', 150], ['דני אברהם', '052-000-0103', 'פתח תקווה', 'רוטשילד 4', 'a2', 'מארז בסיסי × 2', 300]]
       .map(([customer, phone, city, address, areaId, product, amount], i) => ({ id: 'o' + i, customer, phone, city, address, areaId, product, amount, status: 'new', day: dayKey(), createdAt: Date.now() }));
-    return { areas: a, drivers: dr, orders: o, reports: [], managers: [{ name: 'מנהל לדוגמה', phone: '050-000-0301' }], push: null, seq: 100 };
+    return { areas: a, drivers: dr, orders: o, reports: [], managers: [{ name: 'מנהל לדוגמה', phone: '050-000-0301' }], customers: [], push: null, seq: 100 };
   }
   const store = {
     s: null, subs: new Set(), pushSubs: new Set(), lastPush: null,
@@ -88,6 +88,8 @@
         store.commit();
       },
       async setFee(id, fee) { order(id).fee = fee; store.commit(); },
+      watchCustomers: (cb) => watch(() => store.s.customers, cb),
+      async saveCustomers(list) { store.s.customers = list; store.commit(); },
       watchManagers: (cb) => watch(() => store.s.managers, cb),
       async saveManagers(list) { store.s.managers = list; store.commit(); },
       async clearManager() {
@@ -239,6 +241,8 @@
         w.catch((e) => console.error(e));
         return Promise.race([w, new Promise((r) => setTimeout(r, 1500))]);
       },
+      watchCustomers: (cb) => col('tokens').doc('_customers').onSnapshot((d) => cb(d.exists ? d.data().list || [] : []), (e) => console.error(e)),
+      saveCustomers: (list) => col('tokens').doc('_customers').set({ list }),
       // רשימת המנהלים נשמרת כמסמך באוסף tokens, שחוקי ההרשאות כבר מאפשרים
       watchManagers: (cb) => col('tokens').doc('_managers').onSnapshot({ includeMetadataChanges: true }, (d) => {
         if (!d.exists && d.metadata.fromCache) return; // עוד לא יודעים: מחכים לשרת
@@ -332,9 +336,41 @@
 
   /* ---------- עזרי תצוגה ---------- */
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const streetsBusy = {};
   g.UI = {
     esc,
     money: (n) => '₪' + Number(n || 0).toLocaleString('he-IL'),
+    prod: (o) => o.product + (o.qty && Number(o.qty) > 0 ? ` × ${o.qty}` : ''),
+    // רשימת הרחובות של עיר: מאגר הממשלה, ואם הוא לא זמין OpenStreetMap
+    async streetsOf(city) {
+      const name = String(city || '').trim();
+      if (name.length < 2) return [];
+      const key = 'mishmish-streets-' + name;
+      try { const c = JSON.parse(localStorage.getItem(key)); if (c && c.length) return c; } catch (e) { /* אין */ }
+      if (streetsBusy[name]) return streetsBusy[name];
+      streetsBusy[name] = (async () => {
+        let list = [];
+        try {
+          const q = encodeURIComponent(JSON.stringify({ 'שם_ישוב': name }));
+          const r = await fetch(`https://data.gov.il/api/3/action/datastore_search?resource_id=a7296d1a-f8c9-4b70-96c2-6ebb4352f8e3&limit=5000&q=${q}`);
+          const j = await r.json();
+          list = ((j.result && j.result.records) || []).filter((x) => String(x['שם_ישוב'] || '').trim() === name).map((x) => String(x['שם_רחוב'] || '').trim());
+        } catch (e) { console.error(e); }
+        if (!list.length) {
+          try {
+            const q = `[out:json][timeout:25];area["name"="${name.replace(/"/g, '')}"]["place"]->.a;way(area.a)["highway"]["name"];out tags;`;
+            const r = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+            const j = await r.json();
+            list = (j.elements || []).map((x) => x.tags && (x.tags['name:he'] || x.tags.name)).filter(Boolean);
+          } catch (e) { console.error(e); }
+        }
+        list = [...new Set(list.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
+        if (list.length) { try { localStorage.setItem(key, JSON.stringify(list)); } catch (e) { /* עד הסגירה */ } }
+        delete streetsBusy[name];
+        return list;
+      })();
+      return streetsBusy[name];
+    },
     toast(root, title, body) {
       const t = document.createElement('div');
       t.className = 'toast'; t.setAttribute('role', 'status');

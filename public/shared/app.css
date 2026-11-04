@@ -113,3 +113,6 @@ button,input,select{font:inherit}
 @keyframes conf{0%{transform:translateY(-40px) rotate(0)}100%{transform:translateY(110vh) rotate(540deg)}}
 @keyframes celpop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.06);opacity:1}100%{transform:scale(1)}}
 @media (prefers-reduced-motion:reduce){.celebrate>i,.cel-box{animation:none}.celebrate>i{top:auto}}
+.sugwrap{position:relative;min-width:0}
+.sug{display:none;position:absolute;top:100%;right:0;left:0;z-index:6;margin-top:2px;background:#fff;border:1px solid #B9C2BB;border-radius:10px;box-shadow:0 8px 20px rgba(10,30,22,.25);overflow:hidden;max-height:230px;overflow-y:auto;min-width:170px}
+.sug button{display:block;width:100%;min-height:44px;border:0;border-bottom:1px solid #E8EBE6;background:#fff;color:#15231D;text-align:right;padding:6px 12px;font-size:15px;cursor:pointer}

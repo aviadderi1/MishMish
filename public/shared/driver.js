@@ -1,6 +1,6 @@
 // אפליקציית הנהג
 (function (g) {
-  const { esc, money } = g.UI;
+  const { esc, money, prod } = g.UI;
   const REASONS = ['הלקוח לא נמצא', 'הלקוח לא ענה', 'הלקוח סירב', 'כתובת שגויה', 'אחר'];
 
   g.mountDriver = function (root, db) {
@@ -117,7 +117,7 @@
             ? `<button type="button" class="stop ${o.id === firstOpen ? 'next' : ''}" data-a="open" data-v="${esc(o.id)}">
                 <span class="row" style="align-items:baseline"><span style="font-size:20px;font-weight:700">${route && route.legKm[o.id] != null ? `<span class="rnum">${route.ids.indexOf(o.id) + 1}</span>` : ''}${esc(o.customer)}</span><span class="amt">${money(o.amount)}</span></span>
                 <span style="color:#D5DED8">${esc([o.address, o.city].filter(Boolean).join(', '))}</span>
-                <span class="mut" style="font-size:15px">${esc(o.product)}</span>
+                <span class="mut" style="font-size:15px">${esc(prod(o))}</span>
                 ${route && route.legKm[o.id] != null ? `<span class="mut" style="font-size:13px">${route.legKm[o.id]} ק"מ מ${route.ids[0] === o.id ? 'נקודת היציאה' : 'העצירה הקודמת'}</span>` : ''}
                 ${route && route.missing.includes(o.id) ? '<span style="font-size:14px;color:#F4D7A8">הכתובת לא נמצאה במפה, לכן הלקוח בסוף הרשימה</span>' : ''}</button>`
             : `<div class="stop isdone" style="cursor:default;opacity:1"><span class="row"><span style="font-weight:600">${esc(o.customer)}</span><span style="font-weight:700">${money(o.amount)}</span></span>
@@ -210,7 +210,7 @@
         <h1 style="font-size:32px">${esc(o.customer)}</h1><div style="font-size:18px;color:#D5DED8">${esc([o.address, o.city].filter(Boolean).join(', '))}</div></header>
       <main class="main">
         <div class="acts"><a class="act" id="call" href="${hiddenTel(o.phone)}">חיוג מחסוי</a><a class="act" href="${waze(o)}" target="_blank" rel="noopener">ניווט</a></div>
-        <section class="card pad"><div class="mut" style="font-size:15px">למסור ללקוח</div><div style="font-size:22px;font-weight:600">${esc(o.product)}</div></section>
+        <section class="card pad"><div class="mut" style="font-size:15px">למסור ללקוח</div><div style="font-size:22px;font-weight:600">${esc(prod(o))}</div></section>
         <section class="collect"><div style="font-size:16px;font-weight:600">לגבות במזומן</div><b>${money(o.amount)}</b></section>
       </main>
       <div class="footer" style="background:transparent;border:0;padding-bottom:18px">
@@ -245,7 +245,7 @@
       back() { st.open = null; draw(); },
       paid() {
         const o = st.orders.find((x) => x.id === st.open);
-        g.UI.sheet(root, `<h2>קיבלת ${money(o.amount)} במזומן?</h2><p class="mut">${esc(o.customer)} · ${esc(o.product)}. המנהל יקבל הודעה מיד.</p>
+        g.UI.sheet(root, `<h2>קיבלת ${money(o.amount)} במזומן?</h2><p class="mut">${esc(o.customer)} · ${esc(prod(o))}. המנהל יקבל הודעה מיד.</p>
           <button class="btn done" data-s="yes" style="min-height:60px;font-size:20px">כן, נמסר ושולם</button><button class="btn ghost" data-s="close">עוד לא</button>`, async () => {
           st.busy = true; draw();
           try {
@@ -305,7 +305,7 @@
         const counted = Number(String(st.close.counted).replace(/[^\d.]/g, ''));
         if (String(st.close.counted).trim() === '' || Number.isNaN(counted)) { st.err = 'כתוב כמה כסף ספרת.'; return draw(); }
         const c = st.close, n = closeNumbers();
-        const rows = n.os.map((o) => ({ customer: o.customer, city: o.city, product: o.product, status: o.status, amount: o.amount, fee: o.fee || 0 }));
+        const rows = n.os.map((o) => ({ customer: o.customer, city: o.city, product: o.product, qty: o.qty || '', status: o.status, amount: o.amount, fee: o.fee || 0 }));
         (async () => {
           st.busy = true; st.err = ''; draw();
           try {

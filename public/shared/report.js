@@ -39,7 +39,7 @@
     y += rowH;
     rows.forEach((o, n) => {
       let cx = W - M - 14;
-      const cells = [String(startIndex + n + 1), o.customer, o.city, o.product, LABEL[o.status] || '', o.fee ? money(o.fee) : '–', money(o.amount)];
+      const cells = [String(startIndex + n + 1), o.customer, o.city, o.product + (o.qty ? ` × ${o.qty}` : ''), LABEL[o.status] || '', o.fee ? money(o.fee) : '–', money(o.amount)];
       cells.forEach((cell, i) => {
         const w = COLS[i][1];
         x.font = (i === 1 || i === 6 ? '500' : '400') + ' 26px Rubik, sans-serif';
