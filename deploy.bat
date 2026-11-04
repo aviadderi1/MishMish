@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
-set /p PROJECT=Project ID: 
+cd /d "%~dp0"
 call npm install --prefix functions
-call npx firebase-tools login
-call npx firebase-tools deploy --project %PROJECT%
+call npx --yes firebase-tools login
+call npx --yes firebase-tools deploy --only firestore,functions --project mishmish-5624b
 pause

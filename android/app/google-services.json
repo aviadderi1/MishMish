@@ -1,0 +1,28 @@
+{
+  "project_info": {
+    "project_number": "812351848335",
+    "project_id": "mishmish-5624b",
+    "storage_bucket": "mishmish-5624b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:812351848335:android:97f8160f0667a9d43615fa",
+        "android_client_info": { "package_name": "com.aviad.mishloach.driver" }
+      },
+      "oauth_client": [],
+      "api_key": [ { "current_key": "AIzaSyCltipOX00_Wa99_y2KuPviMFBvNskZfM4" } ],
+      "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:812351848335:android:5483501954b007953615fa",
+        "android_client_info": { "package_name": "com.aviad.mishloach.manager" }
+      },
+      "oauth_client": [],
+      "api_key": [ { "current_key": "AIzaSyCltipOX00_Wa99_y2KuPviMFBvNskZfM4" } ],
+      "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+    }
+  ],
+  "configuration_version": "1"
+}
