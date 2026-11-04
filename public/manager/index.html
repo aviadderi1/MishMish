@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#123C2F">
+<title>משלוחים – מנהל</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="../shared/app.css">
+</head>
+<body>
+<div id="root"></div>
+<script src="../shared/config.js"></script>
+<script src="../vendor/firebase-app-compat.js"></script>
+<script src="../vendor/firebase-auth-compat.js"></script>
+<script src="../vendor/firebase-firestore-compat.js"></script>
+<script src="../vendor/firebase-functions-compat.js"></script>
+<script src="../vendor/firebase-messaging-compat.js"></script>
+<script src="../shared/data.js"></script>
+<script src="../shared/manager.js"></script>
+<script>
+  mountManager(document.getElementById('root'), createDB('manager'));
+  if (!window.AndroidApp && 'serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>
