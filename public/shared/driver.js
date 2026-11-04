@@ -55,19 +55,30 @@
                 ${rep && rep.approved
                   ? (o.fee ? `<span class="mut">משלוח: ${money(o.fee)}</span>` : '')
                   : `<button type="button" class="btn ghost" style="color:#F2A33A;border-color:#F2A33A;min-height:44px" data-a="fee" data-v="${esc(o.id)}">${o.fee ? `משלוח: ${money(o.fee)} · עריכה` : 'משלוח'}</button>`}</div>`).join('')}
+          ${os.some((o) => o.status !== 'sent') ? `<button class="btn ghost" style="min-height:44px;color:#F2A33A;border-color:#F2A33A" type="button" data-a="dayFees" data-v="${day}">סך מחיר המשלוחים של היום</button>` : ''}
           ${rep && rep.approved ? '<div class="mut">הדוח אושר על ידי המנהל</div>' : ''}
           ${day !== today && os.length && !(rep && rep.approved) ? `<button class="btn ghost" type="button" data-a="closeDay" data-v="${day}">${rep ? 'עדכון הסיכום של היום הזה' : 'שליחת סיכום ליום הזה'}</button>` : ''}
         </section>`;
       };
       const todayOrders = st.orders.filter((o) => o.day === today);
       const todayRep = reportOf(today);
-      return `<header class="hdr"><div class="sub" style="font-size:16px">שלום ${esc((st.me && st.me.name) || '')}</div><h1>המשלוחים שלי</h1></header>
+      return `<header class="hdr"><div class="row"><div><div class="sub" style="font-size:16px">שלום ${esc((st.me && st.me.name) || '')}</div><h1>המשלוחים שלי</h1></div>
+        <button class="btn hdrbtn" style="width:48px;padding:0;display:flex;align-items:center;justify-content:center;border-color:#2E4139" type="button" data-a="settings" aria-label="הגדרות"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"></path></svg></button></div></header>
       <main class="main" style="gap:16px">
         ${pushOff ? '<div class="card pad"><div>הפעל התראות כדי לדעת מיד כשמגיעים משלוחים חדשים.</div><button class="btn small" type="button" data-a="enablePush">הפעלת התראות</button></div>' : ''}
         ${days.length ? days.map(group).join('') : '<div class="empty">אין לך משלוחים כרגע.<br>כשהמנהל ישלח לך, הם יופיעו כאן.</div>'}
-        <button class="link" type="button" data-a="switchDriver">לא ${esc((st.me && st.me.name) || 'אתה')}? החלפת נהג</button>
       </main>
       ${todayOrders.length && !(todayRep && todayRep.approved) ? `<div class="footer" style="background:transparent"><button class="btn" style="min-height:58px;font-size:18px;font-weight:700" type="button" data-a="closeDay" data-v="${today}">${todayRep ? 'עדכון הסיכום ושליחה מחדש' : 'סיום יום וספירת כסף'}</button></div>` : ''}`;
+    }
+
+    function settingsView() {
+      return `<header class="hdr"><div class="row"><h1>הגדרות</h1><button class="btn hdrbtn" style="border-color:#2E4139" type="button" data-a="settingsBack">חזרה</button></div></header>
+      <main class="main">
+        <section class="card pad"><h2 style="font-size:17px">מחיקת הנתונים שלי</h2>
+          <div class="mut">מוחק מהאפליקציה שלך משלוחים שנסגרו ודוחות. אצל המנהל הם נשארים.</div>
+          <button class="btn ghost" style="color:#F2A33A;border-color:#F2A33A" type="button" data-a="clearAsk">מחיקת הנתונים שלי</button></section>
+        <button class="link" type="button" data-a="switchDriver">לא ${esc((st.me && st.me.name) || 'אתה')}? החלפת נהג</button>
+      </main>`;
     }
 
     function closeNumbers() {
@@ -75,28 +86,27 @@
       const paid = os.filter((o) => o.status === 'paid');
       const collected = paid.reduce((s, o) => s + o.amount, 0);
       const fees = os.reduce((s, o) => s + (o.fee || 0), 0);
-      return { os, paid, failed: os.filter((o) => o.status === 'failed'), open: os.filter((o) => o.status === 'sent'), collected, fees, expected: collected - fees };
+      return { os, paid, failed: os.filter((o) => o.status === 'failed'), open: os.filter((o) => o.status === 'sent'), collected, fees };
     }
 
     function closeView() {
       const c = st.close, n = closeNumbers();
       const counted = Number(String(c.counted).replace(/[^\d.]/g, ''));
       const has = String(c.counted).trim() !== '' && !Number.isNaN(counted);
-      const diff = counted - n.expected;
+      const diff = counted - n.collected;
       return `<header class="hdr"><div class="row"><div class="sub">${dateLabel(c.day)}</div><button class="btn hdrbtn" type="button" data-a="closeBack">חזרה</button></div><h1>סיכום יום</h1></header>
       <main class="main">
         ${st.err ? `<div class="err" role="alert">${esc(st.err)}</div>` : ''}
         <section class="card pad" style="gap:10px;padding:16px">
           <div class="row"><span style="color:#D5DED8">נמסרו</span><b>${n.paid.length} משלוחים</b></div>
           <div class="row"><span style="color:#D5DED8">לא נמסרו</span><b>${n.failed.length + n.open.length}</b></div>
-          <div class="row"><span style="color:#D5DED8">נגבה מלקוחות</span><b>${money(n.collected)}</b></div>
-          <div class="row"><span style="color:#D5DED8">משלוחים (קיזוז)</span><b>${n.fees ? '-' + money(n.fees) : money(0)}</b></div>
-          <div class="row" style="align-items:baseline;border-top:1px solid var(--line);padding-top:10px"><span style="color:#D5DED8">צריך להעביר למנהל</span><b style="font-size:26px">${money(n.expected)}</b></div>
+          <div class="row"><span style="color:#D5DED8">מחיר משלוחים (לא מקוזז)</span><b>${money(n.fees)}</b></div>
+          <div class="row" style="align-items:baseline;border-top:1px solid var(--line);padding-top:10px"><span style="color:#D5DED8">צריך להיות אצלך</span><b style="font-size:26px">${money(n.collected)}</b></div>
         </section>
         ${n.open.length ? `<div class="err" role="status">עדיין יש ${n.open.length} משלוחים פתוחים. הם יופיעו בדוח כלא הושלמו.</div>` : ''}
         <div class="field"><label for="counted" style="font-size:17px;font-weight:600">כמה כסף ספרת? (₪)</label><input id="counted" class="big" style="height:68px;font-size:32px;border-color:#F2A33A" data-f="counted" inputmode="decimal" value="${esc(c.counted)}" autocomplete="off"></div>
         <button class="btn ghost" style="color:#F2A33A;border-color:#F2A33A" type="button" data-a="openCash">ספירה עם טבלת שטרות</button>
-        ${has ? (diff === 0 ? '<div class="tag" role="status" style="padding:12px 14px;font-size:16px">הסכום תואם</div>' : `<div class="err" role="status" style="font-size:16px;font-weight:600">${diff < 0 ? 'חסרים' : 'יש עודף של'} ${money(Math.abs(diff))} לעומת הסכום להעברה</div>`) : ''}
+        ${has ? (diff === 0 ? '<div class="tag" role="status" style="padding:12px 14px;font-size:16px">הסכום תואם</div>' : `<div class="err" role="status" style="font-size:16px;font-weight:600">${diff < 0 ? 'חסרים' : 'יש עודף של'} ${money(Math.abs(diff))} לעומת הסכום שנגבה</div>`) : ''}
         <div class="field"><label for="cnote">הערה למנהל (לא חובה)</label><input id="cnote" data-f="note" value="${esc(c.note)}" autocomplete="off"></div>
       </main>
       <div class="footer" style="background:transparent;padding-bottom:18px"><button class="btn done" style="min-height:64px;font-size:20px" type="button" data-a="sendReport" ${st.busy ? 'disabled' : ''}>${reportOf(c.day) ? 'שליחה מחדש למנהל' : 'שליחת הסיכום למנהל'}</button></div>`;
@@ -139,7 +149,7 @@
     function draw() {
       if (st.user === undefined) return;
       const o = st.open && st.orders.find((x) => x.id === st.open && x.status === 'sent');
-      const v = !st.user ? loginView() : !st.driverId ? pickView() : st.cash ? cashView() : st.close ? closeView() : o ? detailView(o) : listView();
+      const v = !st.user ? loginView() : !st.driverId ? pickView() : st.settings ? settingsView() : st.cash ? cashView() : st.close ? closeView() : o ? detailView(o) : listView();
       g.UI.render(root, (db.demo ? '<div class="demo">מצב הדגמה</div>' : '') + v);
     }
 
@@ -162,6 +172,25 @@
           try { await db.markFailed(o.id, REASONS[i]); st.open = null; } catch (e) { console.error(e); g.UI.toast(root, 'השמירה נכשלה', 'נסה שוב'); }
           draw();
         });
+      },
+      settings() { st.settings = true; draw(); },
+      settingsBack() { st.settings = false; draw(); },
+      clearAsk() {
+        g.UI.sheet(root, `<h2 style="color:#F2A33A">למחוק את הנתונים שלך?</h2><div style="line-height:1.5">משלוחים שנסגרו והדוחות שלך יימחקו מהאפליקציה שלך. <b>אי אפשר לשחזר אותם.</b></div>
+          <div class="mut">משלוחים פתוחים יישארו, כדי שתוכל להשלים אותם.</div>
+          <button class="btn" data-s="yes">מחיקה</button><button class="btn ghost" data-s="close">ביטול</button>`, async () => {
+          try { await db.clearDriver(st.driverId); st.settings = false; g.UI.toast(root, 'הנתונים נמחקו', 'המשלוחים הפתוחים נשארו'); }
+          catch (e) { console.error(e); g.UI.toast(root, 'המחיקה נכשלה', 'בדוק חיבור ונסה שוב'); }
+          draw();
+        });
+      },
+      dayFees(day) {
+        const os = st.orders.filter((o) => o.day === day && o.status !== 'sent');
+        const total = os.reduce((s, o) => s + (o.fee || 0), 0);
+        g.UI.sheet(root, `<h2>מחיר המשלוחים של היום</h2><div class="mut" style="font-size:15px">${dateLabel(day)}</div>
+          <div style="max-height:45vh;overflow-y:auto">${os.map((o) => `<div class="row" style="padding:8px 0;border-top:1px solid var(--line)"><span>${esc(o.customer)}</span><b>${money(o.fee || 0)}</b></div>`).join('')}</div>
+          <div class="row" style="align-items:baseline;border-top:2px solid #F2A33A;padding-top:10px"><span style="font-size:17px">סך הכול</span><b style="font-size:32px;color:#F2A33A">${money(total)}</b></div>
+          <div class="mut">הסכום לא מקוזז מהכסף שמעבירים למנהל.</div><button class="btn ghost" data-s="close">סגירה</button>`, () => {});
       },
       fee(v) {
         const o = st.orders.find((x) => x.id === v);
@@ -188,7 +217,7 @@
         (async () => {
           st.busy = true; st.err = ''; draw();
           try {
-            await db.sendReport({ driverId: st.driverId, driverName: (st.me && st.me.name) || '', driverPhone: (st.me && st.me.phone) || '', day: c.day, counted, collected: n.collected, fees: n.fees, expected: n.expected, note: c.note.trim(), rows });
+            await db.sendReport({ driverId: st.driverId, driverName: (st.me && st.me.name) || '', driverPhone: (st.me && st.me.phone) || '', day: c.day, counted, collected: n.collected, fees: n.fees, expected: n.collected, note: c.note.trim(), rows });
             st.close = null;
             g.UI.toast(root, 'הסיכום נשלח למנהל', money(counted));
           } catch (e) { console.error(e); st.err = 'השליחה נכשלה. נסה שוב.'; }
@@ -222,6 +251,7 @@
     g.handleBack = () => {
       const sc = root.querySelector(':scope > .scrim');
       if (sc) { sc.remove(); return true; }
+      if (st.settings) { actions.settingsBack(); return true; }
       if (st.cash) { actions.cashBack(); return true; }
       if (st.close) { actions.closeBack(); return true; }
       if (st.open) { actions.back(); return true; }
@@ -230,13 +260,13 @@
     db.onPush((p) => { g.UI.toast(root, p.title, p.body); });
     function subscribe() {
       unsub.forEach((f) => f()); unsub = [];
-      st.me = null; st.orders = []; st.reports = []; st.open = null; st.close = null; st.cash = null;
+      st.me = null; st.orders = []; st.reports = []; st.open = null; st.close = null; st.cash = null; st.settings = false;
       if (!st.user) return;
       unsub.push(db.watchDrivers((d) => { st.drivers = d; draw(); }));
       if (st.driverId) {
         unsub.push(db.watchMe(st.driverId, (m) => { st.me = m; draw(); }));
-        unsub.push(db.watchMine(st.driverId, (o) => { st.orders = o; draw(); }));
-        unsub.push(db.watchMyReports(st.driverId, (r) => { st.reports = r; draw(); }));
+        unsub.push(db.watchMine(st.driverId, (o) => { st.orders = o.filter((x) => !x.hiddenDriver); draw(); }));
+        unsub.push(db.watchMyReports(st.driverId, (r) => { st.reports = r.filter((x) => !x.hiddenDriver); draw(); }));
       }
     }
     function setDriver(id) {

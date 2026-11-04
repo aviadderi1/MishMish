@@ -82,7 +82,19 @@
       },
       async approveReport(id) { store.s.reports.find((x) => x.id === id).approved = true; store.commit(); },
       async setFee(id, fee) { order(id).fee = fee; store.commit(); },
-      async resetAll() { store.s.orders = []; store.s.reports = []; store.commit(); },
+      async clearManager() {
+        store.s.orders = store.s.orders.filter((o) => o.status !== 'new');
+        const hide = (x) => { x.hiddenManager = true; return !x.hiddenDriver; };
+        store.s.orders = store.s.orders.filter((o) => o.status === 'sent' || hide(o));
+        store.s.reports = store.s.reports.filter(hide);
+        store.commit();
+      },
+      async clearDriver(id) {
+        const hide = (x) => { if (x.driverId !== id) return true; x.hiddenDriver = true; return !x.hiddenManager; };
+        store.s.orders = store.s.orders.filter((o) => o.status === 'sent' || o.status === 'new' || hide(o));
+        store.s.reports = store.s.reports.filter(hide);
+        store.commit();
+      },
       async saveOrder(o) {
         const id = o.id || store.id();
         if (o.id) Object.assign(order(o.id), o);
@@ -163,6 +175,13 @@
       done.catch((e) => console.error(e));
       return Promise.race([done, new Promise((r) => setTimeout(r, 1500))]);
     };
+    const runBatches = async (ops) => {
+      for (let i = 0; i < ops.length; i += 400) {
+        const b = fs.batch();
+        ops.slice(i, i + 400).forEach((f) => f(b));
+        await b.commit();
+      }
+    };
     const swReg = () => navigator.serviceWorker.register('sw.js');
     return {
       demo: false, role, today: dayKey, digits,
@@ -211,31 +230,30 @@
         w.catch((e) => console.error(e));
         return Promise.race([w, new Promise((r) => setTimeout(r, 1500))]);
       },
-      async resetAll() {
+      // כל צד מוחק רק אצלו. המסמך נמחק מהשרת רק אחרי ששני הצדדים מחקו אותו.
+      async clearManager() {
         const snaps = await Promise.all([col('orders').get({ source: 'server' }), col('reports').get({ source: 'server' })]);
-        const refs = snaps.flatMap((x) => x.docs.map((d) => d.ref));
-        for (let i = 0; i < refs.length; i += 400) {
-          const b = fs.batch();
-          refs.slice(i, i + 400).forEach((r) => b.delete(r));
-          await b.commit();
-        }
+        const ops = [];
+        snaps[0].docs.forEach((d) => {
+          const o = d.data();
+          if (o.status === 'sent') return;
+          if (o.status === 'new' || o.hiddenDriver) ops.push((b) => b.delete(d.ref));
+          else ops.push((b) => b.update(d.ref, { hiddenManager: true }));
+        });
+        snaps[1].docs.forEach((d) => { if (d.data().hiddenDriver) ops.push((b) => b.delete(d.ref)); else ops.push((b) => b.update(d.ref, { hiddenManager: true })); });
+        await runBatches(ops);
       },
-      async saveOrder(o) {
-        const { id, ...f } = o;
-        if (id) { await col('orders').doc(id).update(f); return id; }
-        return (await col('orders').add({ ...f, status: 'new', day: dayKey(), driverId: null, createdAt: now() })).id;
+      async clearDriver(id) {
+        const snaps = await Promise.all([col('orders').where('driverId', '==', id).get({ source: 'server' }), col('reports').where('driverId', '==', id).get({ source: 'server' })]);
+        const ops = [];
+        snaps[0].docs.forEach((d) => {
+          const o = d.data();
+          if (o.status === 'sent' || o.status === 'new') return;
+          if (o.hiddenManager) ops.push((b) => b.delete(d.ref)); else ops.push((b) => b.update(d.ref, { hiddenDriver: true }));
+        });
+        snaps[1].docs.forEach((d) => { if (d.data().hiddenManager) ops.push((b) => b.delete(d.ref)); else ops.push((b) => b.update(d.ref, { hiddenDriver: true })); });
+        await runBatches(ops);
       },
-      deleteOrder: (id) => col('orders').doc(id).delete(),
-      async dispatch(ids, driver) {
-        const batch = fs.batch();
-        ids.forEach((id) => batch.update(col('orders').doc(id), { status: 'sent', driverId: driver.id, driverName: driver.name, day: dayKey(), sentAt: now() }));
-        await batch.commit();
-        notify({ kind: 'dispatch', driverId: driver.id, orderIds: ids });
-      },
-      markPaid: (id) => saveThenNotify(col('orders').doc(id).update({ status: 'paid', day: dayKey(), doneAt: now() }), { kind: 'done', orderId: id }),
-      markFailed: (id, reason) => saveThenNotify(col('orders').doc(id).update({ status: 'failed', failReason: reason, day: dayKey(), doneAt: now() }), { kind: 'done', orderId: id }),
-      returnToOrders: (id) => col('orders').doc(id).update({ status: 'new', driverId: null, driverName: null, failReason: null, day: dayKey() }),
-      reopenToDriver: (id) => col('orders').doc(id).update({ status: 'sent', failReason: null }),
       pushSupported: () => !!native || 'serviceWorker' in navigator && 'Notification' in g && fb.messaging.isSupported(),
       pushState: () => (native ? native.pushState() : ('Notification' in g ? Notification.permission : 'denied')),
       async enablePush() {

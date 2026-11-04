@@ -53,9 +53,8 @@
     if (isLast) {
       y += 50;
       const fees = r.fees || 0;
-      const expected = r.expected != null ? r.expected : r.collected - fees;
-      const diff = r.counted - expected;
-      const lines = [['סך הכול נגבה מלקוחות', money(r.collected)], ['מחיר משלוחים לנהג (קיזוז)', fees ? '-' + money(fees) : money(0)], ['צריך להעביר למנהל', money(expected)], ['כסף שהנהג ספר', money(r.counted)]];
+      const diff = r.counted - r.collected;
+      const lines = [['סך הכול מחיר משלוחים לנהג', money(fees)], ['סך הכול נגבה מלקוחות', money(r.collected)], ['כסף שהנהג ספר', money(r.counted)]];
       const boxW = 640, bx = M;
       lines.forEach(([a, b]) => {
         x.strokeStyle = '#D5DAD4'; x.lineWidth = 2; x.strokeRect(bx, y, boxW, 72);

@@ -19,8 +19,8 @@
     const dayDays = () => [...new Set([db.today(), st.day])];
     const subOrders = () => {
       if (unsubOrders) unsubOrders();
-      const a = db.watchOrders(dayDays(), (o) => { st.orders = o; draw(); });
-      const b = db.watchReports(dayDays(), (r) => { st.reports = r; draw(); });
+      const a = db.watchOrders(dayDays(), (o) => { st.orders = o.filter((x) => !x.hiddenManager); draw(); });
+      const b = db.watchReports(dayDays(), (r) => { st.reports = r.filter((x) => !x.hiddenManager); draw(); });
       unsubOrders = () => { a(); b(); };
     };
 
@@ -71,7 +71,10 @@
       const names = [...groups.keys()].sort((a, b) => areaName(a).localeCompare(areaName(b), 'he'));
       const selected = list.filter((o) => st.sel.has(o.id));
       const selTotal = selected.reduce((s, o) => s + o.amount, 0);
-      return `${hdr('הזמנות לשליחה', `${list.length} הזמנות · ${money(total)} לגבייה`, '<button class="btn hdrbtn" type="button" data-a="areas">ניהול אזורים</button>')}
+      const today = db.today();
+      const sentList = st.orders.filter((o) => o.status === 'sent' || ((o.status === 'paid' || o.status === 'failed') && o.day === today));
+      const stTag = (o) => o.status === 'paid' ? '<span class="tag">שולם</span>' : o.status === 'failed' ? '<span class="tag warn">לא נמסר</span>' : '<span class="tag wait">בדרך</span>';
+      return `${hdr('הזמנות', `${list.length} ממתינות · ${sentList.length} נשלחו · ${money(total)} לשליחה`, '<button class="btn hdrbtn" type="button" data-a="areas">ניהול אזורים</button>')}
       <main class="main">
         ${err()}
         ${list.length ? names.map((k) => {
@@ -85,7 +88,11 @@
               <button type="button" class="tap grow" data-a="editOrder" data-v="${esc(o.id)}"><div style="font-weight:500">${esc(o.customer)}</div><div class="mut">${esc(o.city)} · ${esc(o.product)}</div></button>
               <div class="b">${money(o.amount)}</div></div>`).join('')}
           </section>`;
-        }).join('') : '<div class="empty">אין הזמנות שממתינות לשליחה.<br>הוסף הזמנה בלשונית "חדשה".</div>'}
+        }).join('') : (sentList.length ? '' : '<div class="empty">אין הזמנות.<br>הוסף הזמנה בלשונית "חדשה".</div>')}
+        ${sentList.length ? `<section class="card"><div class="area-h" style="background:#DDF0E8;color:#0B5443"><h2 class="grow" style="font-size:16px;padding:6px 0">נשלחו לנהגים · ${sentList.length}</h2></div>
+          ${sentList.map((o) => `<div class="orow"><div class="grow"><div style="font-weight:500">${esc(o.customer)}</div><div class="mut">${esc(o.city)} · ${esc(o.driverName)}</div></div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><b>${money(o.amount)}</b>${stTag(o)}</div>
+            ${o.status === 'sent' ? `<button type="button" class="icon" style="color:#A32B12" data-a="cancelOrder" data-v="${esc(o.id)}">ביטול</button>` : ''}</div>`).join('')}</section>` : ''}
       </main>
       ${selected.length ? `<div class="footer"><button class="btn" type="button" data-a="assign">שליחת ${selected.length} הזמנות לנהג · ${money(selTotal)}</button></div>` : ''}
       ${nav()}`;
@@ -161,7 +168,7 @@
         </div>
         ${ids.length ? `<section class="card pad"><h2 style="font-size:16px">כמה כל נהג צריך להעביר</h2>
           ${ids.map((id) => { const d = os.filter((o) => o.driverId === id); const dp = d.filter((o) => o.status === 'paid'); const fee = d.reduce((s, o) => s + (o.fee || 0), 0);
-            return `<div class="row" style="border-top:1px solid #E8EBE6;padding-top:8px"><div><div style="font-weight:600">${esc(d[0].driverName)}</div><div class="mut">${dp.length} מתוך ${d.length} נמסרו${fee ? ` · משלוחים ${money(fee)}` : ''}</div></div><div class="b" style="font-size:18px">${money(dp.reduce((s, o) => s + o.amount, 0) - fee)}</div></div>`; }).join('')}</section>` : '<div class="empty">אין נתונים ליום הזה.</div>'}
+            return `<div class="row" style="border-top:1px solid #E8EBE6;padding-top:8px"><div><div style="font-weight:600">${esc(d[0].driverName)}</div><div class="mut">${dp.length} מתוך ${d.length} נמסרו${fee ? ` · משלוחים ${money(fee)}` : ''}</div></div><div class="b" style="font-size:18px">${money(dp.reduce((s, o) => s + o.amount, 0))}</div></div>`; }).join('')}</section>` : '<div class="empty">אין נתונים ליום הזה.</div>'}
         ${missing.length ? `<section class="card pad"><h2 style="font-size:16px">לא נמסר</h2>
           ${missing.map((o) => `<div class="row" style="border-top:1px solid #E8EBE6;padding-top:6px"><div class="grow"><div style="font-weight:500">${esc(o.customer)} · ${esc(o.city)} · ${money(o.amount)}</div><div class="mut">${esc(o.driverName)} · ${o.status === 'failed' ? esc(o.failReason || 'לא נמסר') : 'עדיין בדרך'}</div></div>
           ${o.status === 'failed' ? `<button class="btn ghost small" type="button" data-a="returnOrder" data-v="${esc(o.id)}">החזר להזמנות</button>` : ''}</div>`).join('')}</section>` : ''}
@@ -172,21 +179,21 @@
       </main>${nav()}`;
     }
 
-    const expectedOf = (r) => (r.expected != null ? r.expected : r.collected - (r.fees || 0));
     function reportsView() {
       const label = new Date(st.day + 'T12:00').toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
       const os = st.orders.filter((o) => o.day === st.day && ['sent', 'paid', 'failed'].includes(o.status));
       const reps = st.reports.filter((r) => r.day === st.day);
       const waiting = [...new Set(os.map((o) => o.driverId))].filter((id) => !reps.some((r) => r.driverId === id));
       const tag = (r) => {
-        const d = r.counted - expectedOf(r);
+        const d = r.counted - r.collected;
         return d === 0 ? '<span class="tag">תואם</span>' : `<span class="tag warn">${d < 0 ? 'חסרים' : 'עודף'} ${money(Math.abs(d))}</span>`;
       };
       return `${hdr('דוחות נהגים', label, '<button class="btn hdrbtn" type="button" data-a="back">חזרה</button>')}
       <main class="main">${err()}
         ${reps.map((r) => `<section class="card pad">
           <div class="row"><h2 style="font-size:17px">${esc(r.driverName)}</h2>${tag(r)}</div>
-          <div class="mut" style="color:#3F4B45">${(r.rows || []).filter((x) => x.status === 'paid').length} נמסרו · נגבו ${money(r.collected)}${r.fees ? ` · משלוחים ${money(r.fees)}` : ''} · להעברה ${money(expectedOf(r))} · נספרו ${money(r.counted)}</div>
+          <div class="mut" style="color:#3F4B45">${(r.rows || []).filter((x) => x.status === 'paid').length} נמסרו · נגבו ${money(r.collected)} · נספרו ${money(r.counted)}</div>
+          <div class="mut">סך מחיר משלוחים: ${money(r.fees || 0)}</div>
           ${r.note ? `<div class="mut">הערה: ${esc(r.note)}</div>` : ''}
           <div class="two"><button class="btn ghost" type="button" data-a="openPdf" data-v="${esc(r.id)}">פתיחת דוח PDF</button><button class="btn ghost" type="button" data-a="sharePdf" data-v="${esc(r.id)}">שיתוף</button></div>
           ${r.approved ? '<span class="tag" style="align-self:flex-start">הדוח אושר</span>' : `<button class="btn" type="button" data-a="approve" data-v="${esc(r.id)}">אישור דוח</button>`}
@@ -200,7 +207,7 @@
       return `${hdr('הגדרות', '', '<button class="btn hdrbtn" type="button" data-a="back">חזרה</button>')}
       <main class="main">${err()}
         <section class="card pad"><h2 style="font-size:17px">איפוס נתונים</h2>
-          <div class="mut" style="color:#3F4B45">מוחק הזמנות, משלוחים ודוחות אצלך ואצל כל הנהגים.</div>
+          <div class="mut" style="color:#3F4B45">מוחק הזמנות, משלוחים שנסגרו ודוחות מהאפליקציה שלך. אצל הנהגים הם נשארים.</div>
           <button class="btn ghost" style="color:#A32B12;border-color:#A32B12" type="button" data-a="resetAsk">איפוס נתונים</button></section>
       </main>`;
     }
@@ -370,6 +377,11 @@
         const o = st.orders.find((x) => x.id === v);
         go(() => { st.order = { id: o.id, customer: o.customer, phone: o.phone, city: o.city, address: o.address || '', areaId: o.areaId, product: o.product, amount: String(o.amount) }; st.tab = 'new'; });
       },
+      cancelOrder(v) {
+        const o = st.orders.find((x) => x.id === v);
+        g.UI.sheet(root, `<h2>לבטל את ההזמנה?</h2><div>${esc(o.customer)} · ${esc(o.city)} · ${money(o.amount)}</div><div class="mut" style="color:#3F4B45">הלקוח יימחק גם מהרשימה של ${esc(o.driverName)}.</div>
+          <button class="btn" style="background:#A32B12" data-s="yes">ביטול ההזמנה</button><button class="btn ghost" data-s="close">חזרה</button>`, () => run(() => db.deleteOrder(v)));
+      },
       delOrder(v) {
         g.UI.sheet(root, `<h2>למחוק את ההזמנה?</h2><button class="btn" data-s="yes">מחיקה</button><button class="btn ghost" data-s="close">ביטול</button>`, () => run(async () => {
           await db.deleteOrder(v); st.sel.delete(v); st.order = emptyOrder(); st.tab = 'orders';
@@ -418,13 +430,13 @@
       resetAsk() {
         const WORD = 'מחיקה';
         const sh = g.UI.sheet(root, `<h2 style="color:#A32B12">למחוק את כל הנתונים?</h2>
-          <div style="line-height:1.5">כל ההזמנות, המשלוחים והדוחות יימחקו לצמיתות, גם אצל הנהגים. <b>אי אפשר לשחזר אותם.</b></div>
-          <div class="mut" style="color:#3F4B45">הנהגים והאזורים יישארו.</div>
+          <div style="line-height:1.5">הזמנות, משלוחים שנסגרו ודוחות יימחקו מהאפליקציה שלך. <b>אי אפשר לשחזר אותם.</b></div>
+          <div class="mut" style="color:#3F4B45">אצל הנהגים לא נמחק כלום. משלוחים שבדרך, נהגים ואזורים יישארו.</div>
           <div class="field"><label for="resetword">כדי לאשר, כתוב: ${WORD}</label><input id="resetword" autocomplete="off"></div>
           <button class="btn" style="background:#A32B12" data-s="yes" disabled>מחיקת כל הנתונים</button><button class="btn ghost" data-s="close">ביטול</button>`, () => run(async () => {
-          await db.resetAll();
+          await db.clearManager();
           st.sel.clear(); st.showDetail = false; st.openDriver = null; st.sub = null; st.tab = 'new';
-          g.UI.toast(root, 'הנתונים נמחקו', 'הנהגים והאזורים נשארו');
+          g.UI.toast(root, 'הנתונים נמחקו', 'אצל הנהגים לא השתנה כלום');
         }));
         sh.querySelector('#resetword').addEventListener('input', (e) => { sh.querySelector('[data-s="yes"]').disabled = e.target.value.trim() !== WORD; });
       },
