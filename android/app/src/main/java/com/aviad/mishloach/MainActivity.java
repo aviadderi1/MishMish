@@ -29,6 +29,7 @@ public class MainActivity extends Activity {
   private static final int REQ_NOTIFY = 1, REQ_CALL = 2;
   private WebView web;
   private String pendingCall;
+  private volatile boolean nativeUpdate;
 
   @SuppressLint("SetJavaScriptEnabled")
   @Override protected void onCreate(Bundle state) {
@@ -45,7 +46,7 @@ public class MainActivity extends Activity {
     s.setSupportMultipleWindows(false);
     s.setTextZoom(100);
     final WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
-        .setDomain(HOST).addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this)).build();
+        .setDomain(HOST).addPathHandler("/assets/", Updater.handler(this)).build();
     web.addJavascriptInterface(new Bridge(), "AndroidApp");
     web.setWebViewClient(new WebViewClient() {
       @Override public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest r) {
@@ -64,6 +65,30 @@ public class MainActivity extends Activity {
     if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
       requestPermissions(new String[] {Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFY);
     }
+    new Thread(() -> {
+      Updater.updateWeb(this);
+      nativeUpdate = Updater.nativeUpdateAvailable();
+      if (nativeUpdate) runOnUiThread(() -> web.evaluateJavascript("window.showNativeUpdate && window.showNativeUpdate()", null));
+    }).start();
+  }
+
+  private void installApk() {
+    if (Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
+      Toast.makeText(this, "אשר התקנה מהאפליקציה הזו, חזור ולחץ שוב על עדכון", Toast.LENGTH_LONG).show();
+      startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName())));
+      return;
+    }
+    Toast.makeText(this, "מוריד את העדכון...", Toast.LENGTH_LONG).show();
+    new Thread(() -> {
+      try {
+        File f = Updater.downloadApk(this);
+        Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".files", f);
+        Intent i = new Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        runOnUiThread(() -> startActivity(i));
+      } catch (Exception e) {
+        runOnUiThread(() -> Toast.makeText(this, "הורדת העדכון נכשלה. בדוק חיבור ונסה שוב", Toast.LENGTH_LONG).show());
+      }
+    }).start();
   }
 
   private void openExternal(Uri u) {
@@ -109,6 +134,10 @@ public class MainActivity extends Activity {
   }
 
   private class Bridge {
+    @JavascriptInterface public boolean nativeUpdateAvailable() { return nativeUpdate; }
+
+    @JavascriptInterface public void installUpdate() { runOnUiThread(MainActivity.this::installApk); }
+
     @JavascriptInterface public String pushState() {
       if (Build.VERSION.SDK_INT < 33) return "granted";
       return checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED ? "granted" : "default";

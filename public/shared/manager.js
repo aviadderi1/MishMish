@@ -57,7 +57,8 @@
         ${areaSelect('area', 'order', true)}
         ${field('prod', 'מוצר', 'order', 'product', 'autocomplete="off"')}
         <div class="field"><label for="amount">סכום לגבייה במזומן (₪)</label><input class="big" id="amount" data-f="order.amount" value="${esc(st.order.amount)}" inputmode="decimal" autocomplete="off"></div>
-        <button class="btn" type="submit" ${st.busy ? 'disabled' : ''}>${editing ? 'שמירת שינויים' : 'שמירת הזמנה'}</button>
+        <button class="btn ghost" type="submit" ${st.busy ? 'disabled' : ''}>${editing ? 'שמירת שינויים' : 'שמירת הזמנה'}</button>
+        <button class="btn" type="button" data-a="quickSend" ${st.busy ? 'disabled' : ''}>שלח לנהג</button>
         ${editing ? `<button class="btn ghost" type="button" data-a="cancelEdit">ביטול</button><button class="link" type="button" data-a="delOrder" data-v="${esc(st.order.id)}">מחיקת הזמנה</button>` : ''}
       </form>${nav()}`;
     }
@@ -200,7 +201,8 @@
         ${st.drivers.length ? st.drivers.map((d) => `<div class="card" style="display:flex;align-items:center;gap:12px;padding:10px 14px">
           <span class="ava">${esc(d.name[0] || '')}</span>
           <button type="button" class="tap grow" data-a="editDriver" data-v="${esc(d.id)}"><div style="font-weight:600;font-size:17px">${esc(d.name)} <span class="mut" style="font-weight:400">· ${esc(areaName(d.areaId, 'ללא אזור'))}</span></div>
-          <div class="mut" dir="ltr" style="text-align:right;font-size:15px">${esc(d.phone)}</div></button></div>`).join('')
+          <div class="mut" dir="ltr" style="text-align:right;font-size:15px">${esc(d.phone)}</div></button>
+          <a class="call" href="tel:${esc(db.digits(d.phone))}" aria-label="חיוג אל ${esc(d.name)}"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"></path></svg></a></div>`).join('')
           : '<div class="empty">עדיין אין נהגים. לחץ על + כדי ליצור נהג.</div>'}
       </main>
       <button type="button" class="fab" data-a="newDriver" aria-label="יצירת נהג חדש">+</button>${nav()}`;
@@ -282,6 +284,16 @@
     };
     const validPhone = (p) => /^\d{9,10}$/.test(db.digits(p));
 
+    function readOrderForm() {
+      const o = st.order;
+      const amount = Number(String(o.amount).replace(/[^\d.]/g, ''));
+      const miss = !o.customer.trim() ? 'שם הלקוח' : !validPhone(o.phone) ? 'טלפון תקין' : !o.city.trim() ? 'עיר' : !o.areaId ? 'אזור' : !o.product.trim() ? 'מוצר' : !(amount > 0) ? 'סכום לגבייה' : '';
+      if (miss) { st.err = `חסר: ${miss}.`; return null; }
+      const data = { customer: o.customer.trim(), phone: o.phone.trim(), city: o.city.trim(), address: o.address.trim(), areaId: o.areaId, areaName: areaName(o.areaId), product: o.product.trim(), amount };
+      if (o.id) data.id = o.id;
+      return data;
+    }
+
     const submits = {
       login() {
         const l = st.login;
@@ -289,15 +301,11 @@
         run(() => (l.register ? db.createBusiness(l.password) : db.signIn(l.password)));
       },
       order() {
-        const o = st.order;
-        const amount = Number(String(o.amount).replace(/[^\d.]/g, ''));
-        const miss = !o.customer.trim() ? 'שם הלקוח' : !validPhone(o.phone) ? 'טלפון תקין' : !o.city.trim() ? 'עיר' : !o.areaId ? 'אזור' : !o.product.trim() ? 'מוצר' : !(amount > 0) ? 'סכום לגבייה' : '';
-        if (miss) { st.err = `חסר: ${miss}.`; return draw(); }
+        const data = readOrderForm();
+        if (!data) return draw();
         run(async () => {
-          const data = { customer: o.customer.trim(), phone: o.phone.trim(), city: o.city.trim(), address: o.address.trim(), areaId: o.areaId, areaName: areaName(o.areaId), product: o.product.trim(), amount };
-          if (o.id) data.id = o.id;
           await db.saveOrder(data);
-          const wasEdit = !!o.id;
+          const wasEdit = !!data.id;
           st.order = emptyOrder();
           if (wasEdit) st.tab = 'orders';
           g.UI.toast(root, wasEdit ? 'השינויים נשמרו' : 'ההזמנה נשמרה', `${data.customer} · ${data.city}`);
@@ -355,6 +363,28 @@
         g.UI.sheet(root, `<h2>למחוק את ההזמנה?</h2><button class="btn" data-s="yes">מחיקה</button><button class="btn ghost" data-s="close">ביטול</button>`, () => run(async () => {
           await db.deleteOrder(v); st.sel.delete(v); st.order = emptyOrder(); st.tab = 'orders';
         }));
+      },
+      quickSend() {
+        st.err = '';
+        const data = readOrderForm();
+        if (!data) return draw();
+        if (!st.drivers.length) { st.err = 'עדיין אין נהגים. צור נהג בלשונית "נהגים".'; return draw(); }
+        run(async () => {
+          const id = await db.saveOrder(data);
+          st.order = emptyOrder();
+          const open = (d) => st.orders.filter((o) => o.driverId === d && o.status === 'sent').length;
+          const list = [...st.drivers].sort((a, b) => (b.areaId === data.areaId ? 1 : 0) - (a.areaId === data.areaId ? 1 : 0));
+          g.UI.sheet(root, `<h2>למי לשלוח את ההזמנה?</h2>
+            <div class="mut">${esc(data.customer)} · ${esc(data.city)} · ${esc(data.product)} · ${money(data.amount)}</div>
+            <div style="display:flex;flex-direction:column;gap:8px;max-height:55vh;overflow-y:auto">
+            ${list.map((d) => `<button type="button" class="drvpick" data-s="${esc(d.id)}"><span class="ava">${esc(d.name[0] || '')}</span>
+              <span class="grow"><span style="display:block;font-weight:600">${esc(d.name)} ${d.areaId === data.areaId ? '<span class="tag">האזור שלו</span>' : ''}</span>
+              <span class="mut" style="display:block">${esc(areaName(d.areaId, ''))} · ${open(d.id) ? `${open(d.id)} משלוחים פתוחים` : 'אין משלוחים פתוחים'}</span></span></button>`).join('')}
+            </div><button type="button" class="btn ghost" data-s="close">ביטול</button>`, (driverId) => {
+            const d = st.drivers.find((x) => x.id === driverId);
+            run(async () => { await db.dispatch([id], d); g.UI.toast(root, `נשלח ל${d.name}`, `${data.customer} · ${data.city}`); });
+          });
+        });
       },
       assign() { go(() => { st.sub = 'assign'; const ids = new Set(st.orders.filter((o) => st.sel.has(o.id)).map((o) => o.areaId)); const m = st.drivers.filter((d) => ids.has(d.areaId)); st.pick = m.length === 1 ? m[0].id : null; }); },
       pick(v) { st.pick = v; draw(); },

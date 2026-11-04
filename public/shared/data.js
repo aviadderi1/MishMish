@@ -82,9 +82,11 @@
       },
       async approveReport(id) { store.s.reports.find((x) => x.id === id).approved = true; store.commit(); },
       async saveOrder(o) {
+        const id = o.id || store.id();
         if (o.id) Object.assign(order(o.id), o);
-        else store.s.orders.push({ ...o, id: store.id(), status: 'new', day: dayKey(), createdAt: Date.now() });
+        else store.s.orders.push({ ...o, id, status: 'new', day: dayKey(), createdAt: Date.now() });
         store.commit();
+        return id;
       },
       async deleteOrder(id) { store.s.orders = store.s.orders.filter((o) => o.id !== id); store.commit(); },
       async dispatch(ids, driver) {
@@ -202,10 +204,10 @@
         return saveThenNotify(col('reports').doc(id).set({ ...r, approved: false, sentAt: now() }, { merge: true }), { kind: 'report', reportId: id });
       },
       approveReport: (id) => col('reports').doc(id).update({ approved: true, approvedAt: now() }),
-      saveOrder(o) {
+      async saveOrder(o) {
         const { id, ...f } = o;
-        if (id) return col('orders').doc(id).update(f);
-        return col('orders').add({ ...f, status: 'new', day: dayKey(), driverId: null, createdAt: now() });
+        if (id) { await col('orders').doc(id).update(f); return id; }
+        return (await col('orders').add({ ...f, status: 'new', day: dayKey(), driverId: null, createdAt: now() })).id;
       },
       deleteOrder: (id) => col('orders').doc(id).delete(),
       async dispatch(ids, driver) {
@@ -243,7 +245,23 @@
     };
   }
 
+  // כרטיס "יש גרסה חדשה": מופיע רק כשצריך עדכון של האפליקציה עצמה
+  g.showNativeUpdate = function () {
+    const root = document.querySelector('.app');
+    if (!root || root.querySelector(':scope > .update') || g.updateDismissed) return;
+    const u = document.createElement('div');
+    u.className = 'update'; u.setAttribute('role', 'status');
+    u.innerHTML = '<b>יש גרסה חדשה</b><span>הנתונים שלך יישארו כמו שהם.</span><div class="two"><button type="button" class="btn" data-u="go">עדכון עכשיו</button><button type="button" class="btn ghost" data-u="later">אחר כך</button></div>';
+    u.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-u]');
+      if (!b) return;
+      if (b.dataset.u === 'go') g.AndroidApp.installUpdate();
+      else { g.updateDismissed = true; u.remove(); }
+    });
+    root.appendChild(u);
+  };
   g.createDB = function (role) {
+    if (g.AndroidApp && g.AndroidApp.nativeUpdateAvailable) setTimeout(() => { if (g.AndroidApp.nativeUpdateAvailable()) g.showNativeUpdate(); }, 1500);
     return g.APP_CONFIG && g.APP_CONFIG.firebase ? fireDB(role) : demoDB(role);
   };
 
@@ -280,7 +298,7 @@
       const fid = act && root.contains(act) && act.id;
       let pos = null;
       try { pos = fid ? act.selectionStart : null; } catch (e) { pos = null; }
-      const keep = [...root.querySelectorAll(':scope > .toast, :scope > .scrim')];
+      const keep = [...root.querySelectorAll(':scope > .toast, :scope > .scrim, :scope > .update')];
       root.innerHTML = html;
       keep.forEach((k) => root.appendChild(k));
       const m2 = root.querySelector('.main');

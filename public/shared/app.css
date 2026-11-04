@@ -97,3 +97,9 @@ button,input,select{font:inherit}
 .note-side{width:84px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:2px}
 .note-side b{font-size:24px}
 .note-side button{width:72px;height:44px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font-size:24px;cursor:pointer}
+.update{position:absolute;left:12px;right:12px;top:12px;z-index:25;background:#fff;color:#15231D;border:2px solid #B84A12;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:6px;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.update b{font-size:17px}
+.update span{font-size:14px;color:#3F4B45}
+.update .btn{background:#B84A12;color:#fff;min-height:48px}
+.update .btn.ghost{background:transparent;color:#123C2F;border:1px solid #123C2F;min-height:48px}
+.call{width:48px;height:48px;border-radius:50%;background:#123C2F;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0}
