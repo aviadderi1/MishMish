@@ -1,35 +1,12 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
-    function isManager() { return signedIn() && exists(/databases/$(database)/documents/managers/$(request.auth.uid)); }
-
-    // נוצר רק דרך הפונקציה claimFirstManager
-    match /managers/{uid} { allow read: if signedIn() && request.auth.uid == uid; allow write: if false; }
-
-    match /areas/{id} { allow read, write: if isManager(); }
-
-    // יצירה ומחיקה רק דרך הפונקציות בשרת
-    match /drivers/{id} {
-      allow read: if isManager() || (signedIn() && request.auth.uid == id);
-      allow update: if isManager() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'areaId']);
-      allow create, delete: if false;
-    }
-
-    match /orders/{id} {
-      allow read: if isManager() || (signedIn() && resource.data.driverId == request.auth.uid);
-      allow create, delete: if isManager();
-      allow update: if isManager()
-        || (signedIn()
-            && resource.data.driverId == request.auth.uid
-            && resource.data.status == 'sent'
-            && request.resource.data.status in ['paid', 'failed']
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'day', 'doneAt', 'failReason']));
-    }
-
-    // יוצר התראה לנהג דרך הפונקציה onDispatch
-    match /dispatches/{id} { allow create: if isManager(); allow read, update, delete: if false; }
-
-    match /tokens/{uid} { allow read, write: if signedIn() && request.auth.uid == uid; }
+    // חשבון אחד לכל העסק: מי שיודע את סיסמת העסק נכנס איתו. חשבונות אחרים נחסמים.
+    function business() { return request.auth != null && request.auth.token.email == 'business@mishmish.app'; }
+    match /areas/{id} { allow read, write: if business(); }
+    match /drivers/{id} { allow read, write: if business(); }
+    match /orders/{id} { allow read, write: if business(); }
+    match /tokens/{id} { allow read, write: if business(); }
+    match /dispatches/{id} { allow create: if business(); }
   }
 }

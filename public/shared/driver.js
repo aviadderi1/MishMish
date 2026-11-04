@@ -5,21 +5,29 @@
 
   g.mountDriver = function (root, db) {
     root.classList.add('app', 'drv');
-    const st = { user: undefined, me: null, orders: [], open: null, login: db.demo ? { phone: '050-000-0201', code: '123456' } : { phone: '', code: '' }, err: '', busy: false };
+    const ID_KEY = 'mishmish-driver-id';
+    const readId = () => { try { return localStorage.getItem(ID_KEY); } catch (e) { return null; } };
+    const st = { user: undefined, driverId: readId(), drivers: [], me: null, orders: [], open: null, password: db.demo ? '123456' : '', err: '', busy: false };
     let unsub = [];
 
     const hiddenTel = (phone) => `tel:%2331%23${db.digits(phone)}`; // #31# = חיוג מחסוי
     const waze = (o) => `https://waze.com/ul?q=${encodeURIComponent([o.address, o.city].filter(Boolean).join(', '))}&navigate=yes`;
 
     function loginView() {
-      return `<header class="hdr"><h1>כניסת נהג</h1><div class="sub">הטלפון שלך והקוד שקיבלת מהמנהל</div></header>
+      return `<header class="hdr"><h1>כניסה</h1><div class="sub">הזן את סיסמת העסק שקיבלת מהמנהל. היא תתבקש פעם אחת בלבד</div></header>
       <form class="main" data-submit="login">
         ${st.err ? `<div class="err" role="alert">${esc(st.err)}</div>` : ''}
-        <div class="field"><label for="dphone-l">טלפון</label><input id="dphone-l" data-f="phone" type="tel" dir="ltr" style="text-align:right" value="${esc(st.login.phone)}" autocomplete="username"></div>
-        <div class="field"><label for="dcode-l">קוד כניסה</label><input id="dcode-l" data-f="code" inputmode="numeric" dir="ltr" style="text-align:right" value="${esc(st.login.code)}" autocomplete="current-password"></div>
+        <div class="field"><label for="dpass-l">סיסמת העסק</label><input id="dpass-l" data-f="password" type="password" dir="ltr" value="${esc(st.password)}" autocomplete="current-password"></div>
         <button class="btn" type="submit" ${st.busy ? 'disabled' : ''}>כניסה</button>
-        ${db.demo ? '<div class="mut">בהדגמה: משה, 050-000-0201, קוד 123456</div>' : ''}
       </form>`;
+    }
+
+    function pickView() {
+      return `<header class="hdr"><h1>מי אתה?</h1><div class="sub">בחר את השם שלך. האפליקציה תזכור אותו</div></header>
+      <main class="main">
+        ${st.drivers.length ? st.drivers.map((d) => `<button type="button" class="stop" data-a="pick" data-v="${esc(d.id)}"><span style="font-size:20px;font-weight:700">${esc(d.name)}</span><span class="mut" dir="ltr" style="text-align:right">${esc(d.phone)}</span></button>`).join('')
+          : '<div class="empty">עדיין אין נהגים. בקש מהמנהל להוסיף אותך.</div>'}
+      </main>`;
     }
 
     function listView() {
@@ -41,7 +49,7 @@
         ${!open.length && done.length ? '<div class="empty" style="padding:16px">סיימת את כל המשלוחים.</div>' : ''}
         ${done.length ? `<h2 class="mut" style="font-size:15px;margin-top:6px">הסתיימו</h2>` : ''}
         ${done.map((o) => `<div class="stop isdone" style="cursor:default"><span class="row"><span style="font-weight:600">${esc(o.customer)}</span><span style="font-weight:600">${o.status === 'paid' ? `שולם ${money(o.amount)}` : 'לא נמסר'}</span></span>${o.failReason ? `<span class="mut">${esc(o.failReason)}</span>` : ''}</div>`).join('')}
-        <button class="link" type="button" data-a="logout">יציאה</button>
+        <button class="link" type="button" data-a="switchDriver">לא ${esc((st.me && st.me.name) || 'אתה')}? החלפת נהג</button>
       </main>`;
     }
 
@@ -64,7 +72,7 @@
     function draw() {
       if (st.user === undefined) return;
       const o = st.open && st.orders.find((x) => x.id === st.open && x.status === 'sent');
-      const v = !st.user ? loginView() : o ? detailView(o) : listView();
+      const v = !st.user ? loginView() : !st.driverId ? pickView() : o ? detailView(o) : listView();
       g.UI.render(root, (db.demo ? '<div class="demo">מצב הדגמה</div>' : '') + v);
     }
 
@@ -88,7 +96,8 @@
           draw();
         });
       },
-      logout() { db.signOut(); },
+      pick(v) { setDriver(v); },
+      switchDriver() { setDriver(null); },
       async enablePush() { await db.enablePush().catch((e) => console.error(e)); draw(); }
     };
 
@@ -96,13 +105,13 @@
       const b = e.target.closest('[data-a]');
       if (b && root.contains(b) && actions[b.dataset.a]) actions[b.dataset.a](b.dataset.v);
     });
-    root.addEventListener('input', (e) => { const f = e.target.dataset && e.target.dataset.f; if (f) st.login[f] = e.target.value; });
+    root.addEventListener('input', (e) => { if (e.target.dataset && e.target.dataset.f) st.password = e.target.value; });
     root.addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (!st.login.phone || !st.login.code) { st.err = 'מלא טלפון וקוד.'; return draw(); }
+      if (!st.password) { st.err = 'הזן סיסמה.'; return draw(); }
       st.busy = true; st.err = ''; draw();
-      try { await db.signIn(st.login.phone, st.login.code.trim()); st.login = { phone: '', code: '' }; }
-      catch (x) { console.error(x); st.err = /network/.test(x.code || '') ? 'אין חיבור לרשת.' : 'הטלפון או הקוד לא נכונים.'; }
+      try { await db.signIn(st.password); st.password = ''; }
+      catch (x) { console.error(x); st.err = /network/.test(x.code || '') ? 'אין חיבור לרשת.' : /too-many/.test(x.code || '') ? 'יותר מדי ניסיונות. המתן כמה דקות.' : 'הסיסמה לא נכונה.'; }
       st.busy = false; draw();
     });
 
@@ -113,14 +122,26 @@
       return false;
     };
     db.onPush((p) => { g.UI.toast(root, p.title, p.body); });
-    db.onAuth((u) => {
-      st.user = u; st.open = null; st.me = null; st.orders = [];
+    function subscribe() {
       unsub.forEach((f) => f()); unsub = [];
-      if (u) {
-        unsub.push(db.watchMe(u.uid, (m) => { st.me = m; draw(); }));
-        unsub.push(db.watchMine(u.uid, (o) => { st.orders = o; draw(); }));
+      st.me = null; st.orders = []; st.open = null;
+      if (!st.user) return;
+      unsub.push(db.watchDrivers((d) => { st.drivers = d; draw(); }));
+      if (st.driverId) {
+        unsub.push(db.watchMe(st.driverId, (m) => { st.me = m; draw(); }));
+        unsub.push(db.watchMine(st.driverId, (o) => { st.orders = o; draw(); }));
       }
-      draw();
+    }
+    function setDriver(id) {
+      st.driverId = id;
+      try { id ? localStorage.setItem(ID_KEY, id) : localStorage.removeItem(ID_KEY); } catch (e) { /* נשמר עד סגירה */ }
+      db.setPushKey(id);
+      subscribe(); draw();
+    }
+    db.onAuth((u) => {
+      st.user = u;
+      if (u && st.driverId) db.setPushKey(st.driverId);
+      subscribe(); draw();
     });
     return { state: st };
   };

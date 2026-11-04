@@ -3,7 +3,7 @@
   const pad = (n) => String(n).padStart(2, '0');
   const dayKey = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const digits = (s) => String(s || '').replace(/\D/g, '');
-  const driverEmail = (phone) => `${digits(phone)}@driver.mishloach.app`;
+  const BUSINESS_EMAIL = 'business@mishmish.app'; // חשבון אחד לכל העסק, הסיסמה היא סיסמת העסק
   const by = (k) => (a, b) => String(a[k] || '').localeCompare(String(b[k] || ''), 'he');
 
   /* ---------- מצב הדגמה ---------- */
@@ -11,7 +11,7 @@
   function seed() {
     const a = [['a1', 'צפון'], ['a2', 'מרכז'], ['a3', 'דרום']].map(([id, name]) => ({ id, name }));
     const dr = [['d1', 'משה', '050-000-0201', 'a1'], ['d2', 'עמית', '050-000-0202', 'a2'], ['d3', 'סאמר', '050-000-0203', 'a3']]
-      .map(([id, name, phone, areaId]) => ({ id, name, phone, areaId, code: '123456' }));
+      .map(([id, name, phone, areaId]) => ({ id, name, phone, areaId }));
     const o = [['נועה לוי', '052-000-0101', 'חיפה', 'הנשיא 12', 'a1', 'מארז פרימיום × 2', 480], ['יוסי כהן', '052-000-0102', 'קריית אתא', 'הגפן 7', 'a1', 'מארז בסיסי × 1', 150], ['דני אברהם', '052-000-0103', 'פתח תקווה', 'רוטשילד 4', 'a2', 'מארז בסיסי × 2', 300]]
       .map(([customer, phone, city, address, areaId, product, amount], i) => ({ id: 'o' + i, customer, phone, city, address, areaId, product, amount, status: 'new', day: dayKey(), createdAt: Date.now() }));
     return { areas: a, drivers: dr, orders: o, push: null, seq: 100 };
@@ -44,6 +44,7 @@
     let user = role === 'manager' ? { uid: 'm1', email: 'demo' } : null;
     try { user = JSON.parse(localStorage.getItem(sessKey)) || user; } catch (e) { /* אין */ }
     const authSubs = new Set();
+    let pushKey = role === 'manager' ? 'manager' : null;
     const setUser = (u) => { user = u; try { u ? localStorage.setItem(sessKey, JSON.stringify(u)) : localStorage.removeItem(sessKey); } catch (e) { /* אין */ } authSubs.forEach((f) => f(user)); };
     const watch = (fn, cb) => { const run = () => cb(fn()); store.subs.add(run); setTimeout(run, 0); return () => store.subs.delete(run); };
     const order = (id) => store.s.orders.find((o) => o.id === id);
@@ -51,14 +52,9 @@
       demo: true, role, today: dayKey, digits,
       resetDemo: () => store.reset(),
       onAuth(cb) { authSubs.add(cb); setTimeout(() => cb(user), 0); },
-      async signIn(id, secret) {
-        if (role === 'manager') return setUser({ uid: 'm1', email: id });
-        const d = store.s.drivers.find((x) => digits(x.phone) === digits(id) && x.code === secret);
-        if (!d) throw new Error('auth');
-        setUser({ uid: d.id });
-      },
-      async registerManager(email) { setUser({ uid: 'm1', email }); },
-      async signOut() { setUser(null); },
+      async signIn() { setUser({ uid: 'business' }); },
+      async createBusiness() { setUser({ uid: 'business' }); },
+      setPushKey(k) { pushKey = k; },
       watchAreas: (cb) => watch(() => [...store.s.areas].sort(by('name')), cb),
       async addArea(name) { store.s.areas.push({ id: store.id(), name }); store.commit(); },
       async renameArea(id, name) { store.s.areas.find((a) => a.id === id).name = name; store.commit(); },
@@ -67,12 +63,9 @@
       watchMe: (uid, cb) => watch(() => store.s.drivers.find((d) => d.id === uid) || null, cb),
       async createDriver(d) {
         if (store.s.drivers.some((x) => digits(x.phone) === digits(d.phone))) throw new Error('exists');
-        const code = String(100000 + Math.floor(Math.random() * 900000));
-        store.s.drivers.push({ id: store.id(), ...d, code }); store.commit();
-        return { code };
+        store.s.drivers.push({ id: store.id(), ...d }); store.commit();
       },
       async updateDriver(id, f) { Object.assign(store.s.drivers.find((d) => d.id === id), f); store.commit(); },
-      async resetDriverCode(id) { const code = String(100000 + Math.floor(Math.random() * 900000)); store.s.drivers.find((d) => d.id === id).code = code; store.commit(); return { code }; },
       async deleteDriver(id) { store.s.drivers = store.s.drivers.filter((d) => d.id !== id); store.commit(); },
       watchOrders: (days, cb) => watch(() => store.s.orders.filter((o) => o.status === 'new' || o.status === 'sent' || days.includes(o.day)), cb),
       watchMine: (uid, cb) => watch(() => store.s.orders.filter((o) => o.driverId === uid && (o.status === 'sent' || o.day === dayKey())), cb),
@@ -105,7 +98,7 @@
       async enablePush() { return 'granted'; },
       onPush(cb) {
         store.pushSubs.add((p) => {
-          if (p.target === 'manager' ? role === 'manager' : (role === 'driver' && user && p.target === 'driver:' + user.uid)) cb(p);
+          if (p.target === 'manager' ? role === 'manager' : (role === 'driver' && p.target === 'driver:' + pushKey)) cb(p);
         });
       }
     };
@@ -116,17 +109,17 @@
     const cfg = g.APP_CONFIG;
     const fb = g.firebase;
     if (!fb.apps.length) fb.initializeApp(cfg.firebase);
-    const auth = fb.auth(), fs = fb.firestore(), fns = fb.app().functions(cfg.region);
+    const auth = fb.auth(), fs = fb.firestore();
     fs.enablePersistence({ synchronizeTabs: true }).catch(() => {});
     const col = (n) => fs.collection(n);
     const docs = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    const call = (name, data) => fns.httpsCallable(name)(data).then((r) => r.data);
     const now = () => fb.firestore.FieldValue.serverTimestamp();
     let currentToken = null;
+    let pushKey = role === 'manager' ? 'manager' : null; // tokens/manager או tokens/<מזהה נהג>
     const native = g.AndroidApp;
     const saveToken = async (t) => {
       currentToken = t;
-      await col('tokens').doc(auth.currentUser.uid).set({ list: fb.firestore.FieldValue.arrayUnion(t) }, { merge: true });
+      if (pushKey) await col('tokens').doc(pushKey).set({ list: fb.firestore.FieldValue.arrayUnion(t) }, { merge: true });
     };
     const merged = (queries, cb) => {
       const parts = queries.map(() => []);
@@ -143,33 +136,19 @@
       demo: false, role, today: dayKey, digits,
       onAuth(cb) {
         auth.onAuthStateChanged((u) => {
-          cb(u ? { uid: u.uid, email: u.email } : null);
-          if (u && native) this.enablePush().catch((e) => console.error(e));
+          cb(u ? { uid: u.uid } : null);
+          if (u && native && pushKey) this.enablePush().catch((e) => console.error(e));
         });
       },
-      async signIn(id, secret) {
-        const email = role === 'driver' ? driverEmail(id) : id;
-        await auth.signInWithEmailAndPassword(email, secret);
-        if (role === 'manager') {
-          const u = auth.currentUser;
-          const m = await fs.collection('managers').doc(u.uid).get();
-          if (!m.exists) { await auth.signOut(); throw new Error('auth'); }
+      signIn: (password) => auth.signInWithEmailAndPassword(BUSINESS_EMAIL, password),
+      createBusiness: (password) => auth.createUserWithEmailAndPassword(BUSINESS_EMAIL, password),
+      // הנהג בחר את השם שלו: ההתראות יגיעו למכשיר הזה לפי הנהג שנבחר
+      async setPushKey(k) {
+        if (currentToken && pushKey && pushKey !== k) {
+          await col('tokens').doc(pushKey).set({ list: fb.firestore.FieldValue.arrayRemove(currentToken) }, { merge: true }).catch(() => {});
         }
-      },
-      async registerManager(email, password) {
-        const c = await auth.createUserWithEmailAndPassword(email, password);
-        try { await call('claimFirstManager', {}); } catch (e) {
-          console.error(e);
-          await c.user.delete().catch(() => {});
-          if (e.code === 'functions/already-exists') throw new Error('manager-exists');
-          throw e;
-        }
-      },
-      async signOut() {
-        try {
-          if (currentToken && auth.currentUser) await col('tokens').doc(auth.currentUser.uid).set({ list: fb.firestore.FieldValue.arrayRemove(currentToken) }, { merge: true });
-        } catch (e) { /* לא חוסם יציאה */ }
-        await auth.signOut();
+        pushKey = k;
+        if (k && native) await this.enablePush().catch((e) => console.error(e));
       },
       watchAreas: (cb) => col('areas').orderBy('name').onSnapshot((s) => cb(docs(s))),
       addArea: (name) => col('areas').add({ name }),
@@ -177,10 +156,9 @@
       deleteArea: (id) => col('areas').doc(id).delete(),
       watchDrivers: (cb) => col('drivers').orderBy('name').onSnapshot((s) => cb(docs(s))),
       watchMe: (uid, cb) => col('drivers').doc(uid).onSnapshot((d) => cb(d.exists ? { id: d.id, ...d.data() } : null)),
-      createDriver: (d) => call('createDriver', d),
+      createDriver: (d) => col('drivers').add({ ...d, createdAt: now() }),
       updateDriver: (id, f) => col('drivers').doc(id).update(f),
-      resetDriverCode: (id) => call('resetDriverCode', { id }),
-      deleteDriver: (id) => call('deleteDriver', { id }),
+      async deleteDriver(id) { await col('drivers').doc(id).delete(); await col('tokens').doc(id).delete().catch(() => {}); },
       watchOrders: (days, cb) => merged([
         col('orders').where('status', 'in', ['new', 'sent']),
         col('orders').where('day', 'in', days)

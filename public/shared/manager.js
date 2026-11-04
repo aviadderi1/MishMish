@@ -9,7 +9,7 @@
     const st = {
       user: undefined, tab: 'new', sub: null, areas: [], drivers: [], orders: [], sel: new Set(),
       order: emptyOrder(), driver: emptyDriver(), editDriverId: null, pick: null, created: null,
-      login: { email: '', password: '', register: false }, newArea: '', editArea: null, err: '', busy: false,
+      login: { password: db.demo ? '123456' : '', register: false }, newArea: '', editArea: null, err: '', busy: false,
       day: db.today(), showDetail: false, openDriver: null, pushAsked: false
     };
     const unsub = [];
@@ -35,13 +35,12 @@
 
     function loginView() {
       const l = st.login;
-      return `<header class="hdr"><h1>${l.register ? 'יצירת חשבון מנהל' : 'כניסת מנהל'}</h1></header>
+      return `<header class="hdr"><h1>${l.register ? 'יצירת סיסמת עסק' : 'כניסה'}</h1><div class="sub">${l.register ? 'אותה סיסמה תשמש אותך ואת הנהגים, פעם אחת בכל טלפון' : 'הזן את סיסמת העסק. היא תתבקש פעם אחת בלבד'}</div></header>
       <form class="main" data-submit="login">
         ${err()}
-        ${field('lmail', 'אימייל', 'login', 'email', 'type="email" autocomplete="username" dir="ltr"')}
-        ${field('lpass', 'סיסמה', 'login', 'password', `type="password" autocomplete="${l.register ? 'new-password' : 'current-password'}" dir="ltr"`)}
-        <button class="btn" type="submit" ${st.busy ? 'disabled' : ''}>${l.register ? 'יצירת חשבון' : 'כניסה'}</button>
-        <button class="link" type="button" data-a="toggleRegister">${l.register ? 'יש לי כבר חשבון' : 'פעם ראשונה? יצירת חשבון מנהל'}</button>
+        ${field('lpass', 'סיסמת העסק', 'login', 'password', `type="password" autocomplete="${l.register ? 'new-password' : 'current-password'}" dir="ltr"`)}
+        <button class="btn" type="submit" ${st.busy ? 'disabled' : ''}>${l.register ? 'יצירת הסיסמה' : 'כניסה'}</button>
+        <button class="link" type="button" data-a="toggleRegister">${l.register ? 'כבר יש סיסמה' : 'פעם ראשונה? יצירת סיסמת עסק'}</button>
       </form>`;
     }
 
@@ -165,7 +164,6 @@
         ${os.length ? `<button class="btn ghost" type="button" data-a="toggleDetail">${st.showDetail ? 'הסתרת פירוט' : 'פירוט מלא'}</button>
         ${st.showDetail ? `<section class="card pad"><table class="tbl"><tbody>${os.map((o) => `<tr><td>${esc(o.customer)}<div class="mut">${esc(o.product)} · ${esc(o.driverName)}</div></td><td class="b">${money(o.amount)}</td><td>${o.status === 'paid' ? `<button class="link" type="button" data-a="reopen" data-v="${esc(o.id)}" style="font-size:13px">ביטול סימון</button>` : ''}</td></tr>`).join('')}</tbody></table></section>` : ''}
         ${db.demo ? '' : '<button class="btn ghost" type="button" data-a="csv">ייצוא דוח לאקסל</button>'}` : ''}
-        <button class="link" type="button" data-a="logout">יציאה מהחשבון</button>
         ${db.demo ? '<button class="link" type="button" data-a="resetDemo">איפוס נתוני ההדגמה</button>' : ''}
       </main>${nav()}`;
     }
@@ -192,17 +190,17 @@
         ${areaSelect('darea', 'driver', false)}
         <button class="btn" type="submit" ${st.busy ? 'disabled' : ''}>שמירת נהג</button>
         <button class="btn ghost" type="button" data-a="back">ביטול</button>
-        ${editing ? '<button class="btn ghost" type="button" data-a="resetCode">קוד כניסה חדש</button><button class="link" type="button" data-a="delDriver">מחיקת נהג</button>' : ''}
+        ${editing ? '<button class="link" type="button" data-a="delDriver">מחיקת נהג</button>' : ''}
       </form>`;
     }
 
     function createdView() {
       const c = st.created;
       const link = (g.APP_CONFIG && g.APP_CONFIG.driverApkUrl) || '';
-      const msg = `שלום ${c.name}, להורדת אפליקציית המשלוחים: ${link}\nכניסה עם הטלפון שלך וקוד: ${c.code}`;
-      return `${hdr(`הקוד של ${esc(c.name)}`, 'הנהג נכנס לאפליקציה עם הטלפון והקוד')}
-      <main class="main"><div class="card pad"><div class="code">${esc(c.code)}</div><div class="mut" style="text-align:center">הקוד מוצג עכשיו בלבד. אם הוא יאבד, אפשר ליצור קוד חדש.</div></div>
-      ${db.demo ? '' : `<a class="btn" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="https://wa.me/?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">שליחה לנהג בוואטסאפ</a>`}
+      const msg = `שלום ${c.name}, להורדת אפליקציית המשלוחים: ${link}`;
+      return `${hdr(`${esc(c.name)} נוסף`, 'שלח לו את הקישור ואת סיסמת העסק')}
+      <main class="main">
+      ${db.demo ? '' : `<a class="btn" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="https://wa.me/?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">שליחת קישור הורדה בוואטסאפ</a>`}
       <button class="btn ghost" type="button" data-a="back">סיום</button></main>`;
     }
 
@@ -241,13 +239,12 @@
     /* ---------- פעולות ---------- */
     const friendly = (e) => {
       const c = (e && (e.code || e.message)) || '';
-      if (/manager-exists/.test(c)) return 'כבר קיים חשבון מנהל. אם זה החשבון שלך, היכנס איתו.';
-      if (/email-already/.test(c)) return 'האימייל הזה כבר רשום. נסה להיכנס איתו.';
+      if (/email-already/.test(c)) return 'סיסמת העסק כבר נוצרה. לחץ "כבר יש סיסמה" והזן אותה.';
       if (/weak-password/.test(c)) return 'הסיסמה צריכה לפחות 6 תווים.';
-      if (/invalid-email/.test(c)) return 'כתובת האימייל לא תקינה.';
+      if (/too-many/.test(c)) return 'יותר מדי ניסיונות. המתן כמה דקות.';
       if (/network/.test(c)) return 'אין חיבור לרשת. נסה שוב.';
       if (/^exists$|functions\/already-exists/.test(c)) return 'כבר קיים נהג עם המספר הזה.';
-      if (/^auth$|credential|wrong-password|user-not-found/.test(c)) return 'הפרטים לא נכונים.';
+      if (/credential|wrong-password|user-not-found/.test(c)) return 'הסיסמה לא נכונה.';
       return `הפעולה נכשלה. נסה שוב. (קוד שגיאה: ${c || 'לא ידוע'})`;
     };
     const run = async (f) => {
@@ -261,8 +258,8 @@
     const submits = {
       login() {
         const l = st.login;
-        if (!l.email.trim() || !l.password) { st.err = 'מלא אימייל וסיסמה.'; return draw(); }
-        run(() => (l.register ? db.registerManager(l.email.trim(), l.password) : db.signIn(l.email.trim(), l.password)));
+        if (!l.password) { st.err = 'הזן סיסמה.'; return draw(); }
+        run(() => (l.register ? db.createBusiness(l.password) : db.signIn(l.password)));
       },
       order() {
         const o = st.order;
@@ -289,8 +286,9 @@
             await db.updateDriver(st.editDriverId, { name: d.name.trim(), areaId: d.areaId });
             st.sub = null;
           } else {
-            const r = await db.createDriver({ name: d.name.trim(), phone: d.phone.trim(), areaId: d.areaId });
-            st.created = { name: d.name.trim(), code: r.code };
+            if (st.drivers.some((x) => db.digits(x.phone) === db.digits(d.phone))) throw new Error('exists');
+            await db.createDriver({ name: d.name.trim(), phone: d.phone.trim(), areaId: d.areaId });
+            st.created = { name: d.name.trim() };
             st.sub = 'created';
           }
           st.driver = emptyDriver(); st.editDriverId = null;
@@ -364,7 +362,6 @@
         const a = document.createElement('a'); a.href = url; a.download = `סיכום-${st.day}.csv`; document.body.appendChild(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       },
-      logout() { db.signOut(); },
       resetDemo() { db.resetDemo(); st.sel.clear(); },
       newDriver() {
         go(() => { st.editDriverId = null; st.driver = emptyDriver(); st.sub = 'driverForm'; });
@@ -372,10 +369,6 @@
       editDriver(v) {
         const d = st.drivers.find((x) => x.id === v);
         go(() => { st.editDriverId = v; st.driver = { name: d.name, phone: d.phone, areaId: d.areaId || '' }; st.sub = 'driverForm'; });
-      },
-      resetCode() {
-        const id = st.editDriverId, name = st.driver.name;
-        run(async () => { const r = await db.resetDriverCode(id); st.created = { name, code: r.code }; st.sub = 'created'; st.editDriverId = null; st.driver = emptyDriver(); });
       },
       delDriver() {
         const id = st.editDriverId;
