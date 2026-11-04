@@ -74,7 +74,7 @@
       return `${hdr(editing ? 'עריכת הזמנה' : 'הזמנה חדשה', new Date().toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' }), '<button class="btn hdrbtn" style="width:48px;padding:0;display:flex;align-items:center;justify-content:center" type="button" data-a="settings" aria-label="הגדרות"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"></path></svg></button>')}
       <form class="main" data-submit="order">
         ${err()}
-        <div class="sugwrap">${field('cust', 'שם הלקוח', 'order', 'customer', 'autocomplete="off"')}<div class="sug" id="sug-cust"></div></div>
+        <div class="sugwrap"><div class="field"><label for="cust">שם הלקוח</label><div style="display:flex;gap:8px"><input id="cust" style="flex:1;min-width:0" data-f="order.customer" value="${esc(st.order.customer)}" autocomplete="off"><button type="button" class="btn ghost" style="width:auto;flex-shrink:0;min-height:48px;padding:0 10px;font-size:14px;background:#E1ECF7;color:#173F70" data-a="customersFromOrder">לקוחות קבועים</button></div></div><div class="sug" id="sug-cust"></div></div>
         <div class="sugwrap">${field('phone', 'טלפון', 'order', 'phone', 'type="tel" dir="ltr" style="text-align:right" autocomplete="off"')}<div class="sug" id="sug-phone"></div></div>
         <div class="two">${field('city', 'עיר', 'order', 'city', 'autocomplete="off"')}<div class="sugwrap">${field('addr', 'רחוב ומספר', 'order', 'address', 'autocomplete="off"')}<div class="sug" id="sug-addr"></div></div></div>
         ${areaSelect('area', 'order', true)}
@@ -238,11 +238,13 @@
     }
 
     function customersView() {
-      return `${hdr('לקוחות קבועים', `${st.customers.length} לקוחות`, '<button class="btn hdrbtn" type="button" data-a="settings">חזרה</button>')}
+      const q = (st.custSearch || '').trim(), dq = db.digits(q);
+      const list = st.customers.map((c, i) => ({ c, i })).filter(({ c }) => !q || c.name.includes(q) || (dq && db.digits(c.phone).includes(dq))).sort((a, b) => a.c.name.localeCompare(b.c.name, 'he'));
+      return `${hdr('לקוחות קבועים', `${st.customers.length} לקוחות`, '<button class="btn hdrbtn" type="button" data-a="custBack">חזרה</button>')}
       <main class="main">${err()}
-        ${st.customers.length ? st.customers.map((c, i) => `<div class="card" style="display:flex;align-items:center;gap:6px;padding:8px 14px"><div class="grow"><div style="font-weight:600">${esc(c.name)}</div><div class="mut">${esc([c.address, c.city].filter(Boolean).join(', '))}</div><div class="mut" dir="ltr" style="text-align:right">${esc(c.phone)}</div></div>
-          <button type="button" class="icon" data-a="editCustomer" data-v="${i}">עריכה</button><button type="button" class="icon" style="color:#A32B12" data-a="delCustomer" data-v="${i}">מחיקה</button></div>`).join('')
-          : '<div class="empty">עדיין אין לקוחות קבועים.<br>בהזמנה חדשה לחץ "הוסף לקוח זה ללקוחות קבועים".</div>'}
+        ${st.customers.length ? `<input class="inp" id="custsearch" data-f="root.custSearch" value="${esc(st.custSearch || '')}" placeholder="חיפוש לפי שם או טלפון" aria-label="חיפוש לקוח" autocomplete="off">` : ''}
+        ${list.map(({ c, i }) => `<button type="button" class="card tap pad" data-a="custMenu" data-v="${i}" style="box-sizing:border-box;gap:2px"><span style="font-weight:600;font-size:16px">${esc(c.name)}</span><span class="mut">${esc([c.address, c.city].filter(Boolean).join(', '))}</span></button>`).join('')}
+        ${!st.customers.length ? '<div class="empty">עדיין אין לקוחות קבועים.<br>בהזמנה חדשה לחץ "הוסף לקוח זה ללקוחות קבועים".</div>' : (!list.length ? '<div class="empty">לא נמצא לקוח.</div>' : '')}
       </main>`;
     }
 
@@ -253,7 +255,7 @@
         ${field('ccphone', 'טלפון', 'cust', 'phone', 'type="tel" dir="ltr" style="text-align:right" autocomplete="off"')}
         <div class="two">${field('cccity', 'עיר', 'cust', 'city', 'autocomplete="off"')}${field('ccaddr', 'רחוב ומספר', 'cust', 'address', 'autocomplete="off"')}</div>
         ${areaSelect('ccarea', 'cust', false)}
-        <button class="btn" type="submit" ${st.busy ? 'disabled' : ''}>שמירה</button><button class="btn ghost" type="button" data-a="customers">ביטול</button>
+        <button class="btn" type="submit" ${st.busy ? 'disabled' : ''}>שמירה</button><button class="btn ghost" type="button" data-a="custList">ביטול</button>
       </form>`;
     }
 
@@ -528,7 +530,20 @@
         const d = new Date(st.day + 'T12:00'); d.setDate(d.getDate() + Number(v));
         st.day = db.today(d); st.showDetail = false; subOrders(); draw();
       },
-      customers() { go(() => { st.sub = 'customers'; }); },
+      customers() { go(() => { st.custFrom = 'settings'; st.custSearch = ''; st.sub = 'customers'; }); },
+      customersFromOrder() { go(() => { st.custFrom = 'order'; st.custSearch = ''; st.sub = 'customers'; }); },
+      custList() { go(() => { st.sub = 'customers'; }); },
+      custBack() { go(() => { st.sub = st.custFrom === 'order' ? null : 'settings'; }); },
+      custMenu(i) {
+        const c = st.customers[Number(i)];
+        g.UI.sheet(root, `<h2>${esc(c.name)}</h2><div class="mut" style="color:#3F4B45">${esc([c.address, c.city].filter(Boolean).join(', '))} · ${esc(c.phone)}</div>
+          <button class="btn" data-s="new">צור הזמנה חדשה ללקוח זה</button><button class="btn ghost" data-s="edit">ערוך פרטי לקוח</button>
+          <button class="btn ghost" style="color:#A32B12;border-color:#A32B12" data-s="del">מחק לקוח</button><button class="link" data-s="close">ביטול</button>`, (choice) => {
+          if (choice === 'new') go(() => { st.order = { ...emptyOrder(), customer: c.name, phone: c.phone, city: c.city || '', address: c.address || '', areaId: c.areaId || '' }; st.sub = null; st.tab = 'new'; });
+          else if (choice === 'edit') actions.editCustomer(i);
+          else if (choice === 'del') actions.delCustomer(i);
+        });
+      },
       editCustomer(i) { go(() => { st.custIdx = Number(i); st.cust = { ...emptyCust(), ...st.customers[Number(i)] }; st.sub = 'custForm'; }); },
       delCustomer(i) {
         const c = st.customers[Number(i)];
@@ -669,6 +684,7 @@
       const [form, key] = f.split('.');
       if (e.target.value === '__new') { e.target.value = ''; return go(() => { st.sub = 'areas'; }); }
       if (form === 'root') st[key] = e.target.value; else st[form][key] = e.target.value;
+      if (key === 'custSearch') draw();
       if (form === 'order') {
         if (key === 'customer') suggestCustomers('customer', 'sug-cust');
         if (key === 'phone') suggestCustomers('phone', 'sug-phone');
