@@ -366,7 +366,7 @@
       const fid = act && root.contains(act) && act.id;
       let pos = null;
       try { pos = fid ? act.selectionStart : null; } catch (e) { pos = null; }
-      const keep = [...root.querySelectorAll(':scope > .toast, :scope > .scrim, :scope > .update')];
+      const keep = [...root.querySelectorAll(':scope > .toast, :scope > .scrim, :scope > .update, :scope > .celebrate')];
       root.innerHTML = html;
       keep.forEach((k) => root.appendChild(k));
       const m2 = root.querySelector('.main');

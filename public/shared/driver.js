@@ -226,6 +226,20 @@
       g.UI.render(root, (db.demo ? '<div class="demo">מצב הדגמה</div>' : '') + v);
     }
 
+    function celebrate() {
+      const c = document.createElement('div');
+      c.className = 'celebrate'; c.setAttribute('role', 'dialog'); c.setAttribute('aria-modal', 'true');
+      const colors = ['#F2A33A', '#5BD29A', '#FFFFFF', '#6FB2F2', '#F2788A'];
+      let bits = '';
+      for (let i = 0; i < 36; i++) {
+        bits += `<i aria-hidden="true" style="left:${(i * 37) % 100}%;background:${colors[i % 5]};animation-duration:${2.4 + (i % 5) * 0.4}s;animation-delay:-${(i % 7) * 0.5}s"></i>`;
+      }
+      c.innerHTML = `${bits}<div class="cel-box"><svg aria-hidden="true" width="110" height="110" viewBox="0 0 24 24" fill="none" stroke="#F2A33A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M7 12.5l3.5 3.5L17 9"></path></svg>
+        <h1>כל הכבוד!</h1><p>סיימת את היום בהצלחה,<br>המשך יום מקסים</p></div><button type="button" class="btn" data-c="1">תודה</button>`;
+      c.addEventListener('click', (e) => { if (e.target.closest('[data-c]')) c.remove(); });
+      root.appendChild(c);
+    }
+
     const actions = {
       open(v) { st.open = v; draw(); const m = root.querySelector('.main'); if (m) m.scrollTop = 0; },
       back() { st.open = null; draw(); },
@@ -234,7 +248,11 @@
         g.UI.sheet(root, `<h2>קיבלת ${money(o.amount)} במזומן?</h2><p class="mut">${esc(o.customer)} · ${esc(o.product)}. המנהל יקבל הודעה מיד.</p>
           <button class="btn done" data-s="yes" style="min-height:60px;font-size:20px">כן, נמסר ושולם</button><button class="btn ghost" data-s="close">עוד לא</button>`, async () => {
           st.busy = true; draw();
-          try { await db.markPaid(o.id); st.open = null; g.UI.toast(root, 'נשמר', `${o.customer} · ${money(o.amount)}`); }
+          try {
+            const lastOne = !st.orders.some((x) => x.status === 'sent' && x.id !== o.id);
+            await db.markPaid(o.id); st.open = null;
+            if (lastOne) celebrate(); else g.UI.toast(root, 'נשמר', `${o.customer} · ${money(o.amount)}`);
+          }
           catch (e) { console.error(e); g.UI.toast(root, 'השמירה נכשלה', `נסה שוב (${(e && (e.code || e.message)) || 'לא ידוע'})`); }
           st.busy = false; draw();
         });
@@ -333,6 +351,8 @@
     g.handleBack = () => {
       const sc = root.querySelector(':scope > .scrim');
       if (sc) { sc.remove(); return true; }
+      const cel = root.querySelector(':scope > .celebrate');
+      if (cel) { cel.remove(); return true; }
       if (st.settings) { actions.settingsBack(); return true; }
       if (st.cash) { actions.cashBack(); return true; }
       if (st.close) { actions.closeBack(); return true; }
