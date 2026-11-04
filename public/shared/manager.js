@@ -19,7 +19,11 @@
     let unsubOrders = null;
     const go = (f) => { st.err = ''; f && f(); draw(); };
     const areaName = (id, fallback) => (st.areas.find((a) => a.id === id) || {}).name || fallback || 'ללא אזור';
-    const dayDays = () => [...new Set([db.today(), st.day])];
+    const dayDays = () => { // 14 הימים האחרונים, ועוד היום שנבחר בסיכום
+      const out = [st.day]; const d = new Date();
+      for (let i = 0; i < 14; i++) { out.push(db.today(d)); d.setDate(d.getDate() - 1); }
+      return [...new Set(out)];
+    };
     const subOrders = () => {
       if (unsubOrders) unsubOrders();
       const a = db.watchOrders(dayDays(), (o) => { st.orders = o.filter((x) => !x.hiddenManager); draw(); });
@@ -84,33 +88,43 @@
     function ordersView() {
       const list = st.orders.filter((o) => o.status === 'new');
       const total = list.reduce((s, o) => s + o.amount, 0);
-      const groups = new Map();
-      list.forEach((o) => { const k = o.areaId; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(o); });
-      const names = [...groups.keys()].sort((a, b) => areaName(a).localeCompare(areaName(b), 'he'));
+      const days14 = dayDays();
+      const sentAll = st.orders.filter((o) => o.status === 'sent' || ((o.status === 'paid' || o.status === 'failed') && days14.includes(o.day)));
       const selected = list.filter((o) => st.sel.has(o.id));
       const selTotal = selected.reduce((s, o) => s + o.amount, 0);
-      const today = db.today();
-      const sentList = st.orders.filter((o) => o.status === 'sent' || ((o.status === 'paid' || o.status === 'failed') && o.day === today));
       const stTag = (o) => o.status === 'paid' ? '<span class="tag">שולם</span>' : o.status === 'failed' ? '<span class="tag warn">לא נמסר</span>' : '<span class="tag wait">בדרך</span>';
-      return `${hdr('הזמנות', `${list.length} ממתינות · ${sentList.length} נשלחו · ${money(total)} לשליחה`, '<button class="btn hdrbtn" type="button" data-a="areas">ניהול אזורים</button>')}
-      <main class="main">
+      const days = [...new Set(list.concat(sentAll).map((o) => o.day))].sort().reverse();
+      const dateLabel = (day) => new Date(day + 'T12:00').toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      const dayBlock = (day) => {
+        const waiting = list.filter((o) => o.day === day);
+        const sent = sentAll.filter((o) => o.day === day);
+        const groups = new Map();
+        waiting.forEach((o) => { if (!groups.has(o.areaId)) groups.set(o.areaId, []); groups.get(o.areaId).push(o); });
+        const keys = [...groups.keys()].sort((a, b) => areaName(a).localeCompare(areaName(b), 'he'));
+        return `<section style="display:flex;flex-direction:column;gap:8px;flex-shrink:0">
+          <h2 style="font-size:17px;color:#123C2F">${dateLabel(day)}</h2>
+          ${keys.map((k) => {
+            const os = groups.get(k);
+            const all = os.every((o) => st.sel.has(o.id));
+            const key = `${day}|${k}`;
+            return `<div class="card"><div class="area-h">
+              <input type="checkbox" id="ga-${esc(key)}" data-a="selArea" data-v="${esc(key)}" ${all ? 'checked' : ''} aria-label="בחירת כל האזור">
+              <h3 class="grow" style="margin:0;font-size:16px">ממתינות · ${esc(areaName(k, os[0].areaName))} · ${os.length}</h3>
+              <span class="b">${money(os.reduce((s, o) => s + o.amount, 0))}</span></div>
+              ${os.map((o) => `<div class="orow"><input type="checkbox" id="o-${esc(o.id)}" data-a="sel" data-v="${esc(o.id)}" ${st.sel.has(o.id) ? 'checked' : ''} aria-label="בחירת ${esc(o.customer)}">
+                <button type="button" class="tap grow" data-a="editOrder" data-v="${esc(o.id)}"><div style="font-weight:500">${esc(o.customer)}</div><div class="mut">${esc(o.city)} · ${esc(o.product)}</div></button>
+                <div class="b">${money(o.amount)}</div></div>`).join('')}</div>`;
+          }).join('')}
+          ${sent.length ? `<div class="card"><div class="area-h" style="background:#DDF0E8;color:#0B5443"><h3 class="grow" style="margin:0;font-size:16px;padding:6px 0">נשלחו לנהגים · ${sent.length}</h3></div>
+            ${sent.map((o) => `<div class="orow"><div class="grow"><div style="font-weight:500">${esc(o.customer)}</div><div class="mut">${esc(o.city)} · ${esc(o.driverName)}</div></div>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><b>${money(o.amount)}</b>${stTag(o)}</div>
+              ${o.status === 'sent' ? `<button type="button" class="icon" style="color:#A32B12" data-a="cancelOrder" data-v="${esc(o.id)}">ביטול</button>` : ''}</div>`).join('')}</div>` : ''}
+        </section>`;
+      };
+      return `${hdr('הזמנות', `${list.length} ממתינות · ${sentAll.length} נשלחו · ${money(total)} לשליחה`, '<button class="btn hdrbtn" type="button" data-a="areas">ניהול אזורים</button>')}
+      <main class="main" style="gap:16px">
         ${err()}
-        ${list.length ? names.map((k) => {
-          const os = groups.get(k);
-          const all = os.every((o) => st.sel.has(o.id));
-          return `<section class="card"><div class="area-h">
-            <input type="checkbox" id="ga-${esc(k)}" data-a="selArea" data-v="${esc(k)}" ${all ? 'checked' : ''} aria-label="בחירת כל האזור">
-            <h2 class="grow" style="font-size:16px">${esc(areaName(k, os[0].areaName))} · ${os.length}</h2>
-            <span class="b">${money(os.reduce((s, o) => s + o.amount, 0))}</span></div>
-            ${os.map((o) => `<div class="orow"><input type="checkbox" id="o-${esc(o.id)}" data-a="sel" data-v="${esc(o.id)}" ${st.sel.has(o.id) ? 'checked' : ''} aria-label="בחירת ${esc(o.customer)}">
-              <button type="button" class="tap grow" data-a="editOrder" data-v="${esc(o.id)}"><div style="font-weight:500">${esc(o.customer)}</div><div class="mut">${esc(o.city)} · ${esc(o.product)}</div></button>
-              <div class="b">${money(o.amount)}</div></div>`).join('')}
-          </section>`;
-        }).join('') : (sentList.length ? '' : '<div class="empty">אין הזמנות.<br>הוסף הזמנה בלשונית "חדשה".</div>')}
-        ${sentList.length ? `<section class="card"><div class="area-h" style="background:#DDF0E8;color:#0B5443"><h2 class="grow" style="font-size:16px;padding:6px 0">נשלחו לנהגים · ${sentList.length}</h2></div>
-          ${sentList.map((o) => `<div class="orow"><div class="grow"><div style="font-weight:500">${esc(o.customer)}</div><div class="mut">${esc(o.city)} · ${esc(o.driverName)}</div></div>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><b>${money(o.amount)}</b>${stTag(o)}</div>
-            ${o.status === 'sent' ? `<button type="button" class="icon" style="color:#A32B12" data-a="cancelOrder" data-v="${esc(o.id)}">ביטול</button>` : ''}</div>`).join('')}</section>` : ''}
+        ${days.length ? days.map(dayBlock).join('') : '<div class="empty">אין הזמנות.<br>הוסף הזמנה בלשונית "חדשה".</div>'}
       </main>
       ${selected.length ? `<div class="footer"><button class="btn" type="button" data-a="assign">שליחת ${selected.length} הזמנות לנהג · ${money(selTotal)}</button></div>` : ''}
       ${nav()}`;
@@ -419,7 +433,8 @@
       cancelEdit() { go(() => { st.order = emptyOrder(); st.tab = 'orders'; }); },
       sel(v) { st.sel.has(v) ? st.sel.delete(v) : st.sel.add(v); draw(); },
       selArea(v) {
-        const os = st.orders.filter((o) => o.status === 'new' && o.areaId === v);
+        const [day, area] = v.split('|');
+        const os = st.orders.filter((o) => o.status === 'new' && o.areaId === area && o.day === day);
         const all = os.every((o) => st.sel.has(o.id));
         os.forEach((o) => (all ? st.sel.delete(o.id) : st.sel.add(o.id)));
         draw();
