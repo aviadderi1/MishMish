@@ -23,3 +23,4 @@ jobs:
         with: { path: public }
       - id: deploy
         uses: actions/deploy-pages@v4
+# מפרסם את public לכתובת aviadderi1.github.io/MishMish
