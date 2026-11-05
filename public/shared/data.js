@@ -298,7 +298,7 @@
       markFailed: (id, reason) => saveThenNotify(col('orders').doc(id).update({ status: 'failed', failReason: reason, day: dayKey(), doneAt: now() }), { kind: 'done', orderId: id }),
       returnToOrders: (id) => col('orders').doc(id).update({ status: 'new', driverId: null, driverName: null, failReason: null, hiddenDriver: false, day: dayKey() }),
       reopenToDriver: (id) => col('orders').doc(id).update({ status: 'sent', failReason: null, hiddenDriver: false }),
-      pushSupported: () => !!native || 'serviceWorker' in navigator && 'Notification' in g && fb.messaging.isSupported(),
+      pushSupported: () => !!native || !!cfg.vapidKey && 'serviceWorker' in navigator && 'Notification' in g && fb.messaging.isSupported(),
       pushState: () => (native ? native.pushState() : ('Notification' in g ? Notification.permission : 'denied')),
       async enablePush() {
         if (native) {
@@ -314,7 +314,7 @@
         return perm;
       },
       onPush(cb) {
-        if (native || !('serviceWorker' in navigator) || !fb.messaging.isSupported()) return; // באפליקציה ההתראה מוצגת על ידי המערכת
+        if (native || !cfg.vapidKey || !('serviceWorker' in navigator) || !fb.messaging.isSupported()) return; // באפליקציה ההתראה מוצגת על ידי המערכת
         fb.messaging().onMessage((m) => {
           const n = (m.notification || {});
           cb({ id: m.messageId, title: n.title, body: n.body });

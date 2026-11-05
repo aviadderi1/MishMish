@@ -176,6 +176,11 @@
       g.AndroidApp.openFile(name, btoa(bin), 'application/pdf', !!share);
       return;
     }
+    // באייפון: חלון השיתוף של המערכת מאפשר לפתוח, לשמור או לשלוח את הקובץ
+    try {
+      const file = new File([bytes], name, { type: 'application/pdf' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; }
+    } catch (e) { if (e && e.name === 'AbortError') return; console.error(e); }
     const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
     const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2000);

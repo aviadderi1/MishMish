@@ -123,3 +123,9 @@ button,input,select{font:inherit}
 .drv .seg.on{background:#F2A33A;color:#1A1206}
 .sres{padding:9px 12px;min-height:56px;border-top:1px solid #E8EBE6;box-sizing:border-box}
 .hdr .inp{margin-top:8px;border:0}
+.hdr{padding-top:calc(22px + env(safe-area-inset-top,0px))}
+.nav{padding-bottom:env(safe-area-inset-bottom,0px)}
+.footer{padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))}
+.sheet{padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+.fab{bottom:calc(78px + env(safe-area-inset-bottom,0px))}
+.toast{top:calc(12px + env(safe-area-inset-top,0px))}
